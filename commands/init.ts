@@ -196,8 +196,8 @@ export async function initCommand(options: InitOptions): Promise<void> {
 			{ cmd: `${pm} nx build @workspace/${uiPkgName}`, comment: "build the UI package" },
 		],
 		tips: [
-			{ label: "Add more components:", cmd: `nx-shadcn add-component button card` },
-			{ label: "Add a new app:",       cmd: `nx-shadcn add-app --name dashboard --framework vite` },
+			{ label: "Add more components:", cmd: `nx-factory add-component button card` },
+			{ label: "Add a new app:",       cmd: `nx-factory add-app --name dashboard --framework vite` },
 		],
 	});
 }
@@ -566,7 +566,7 @@ async function installShadcnComponents(
 	} catch {
 		printWarn(
 			"Failed to add shadcn components",
-			"Add them manually later with: nx-shadcn add-component",
+			"Add them manually later with: nx-factory add-component",
 		);
 	}
 }
@@ -609,5 +609,3 @@ async function updateNxJson(cwd: string, uiPkgName: string): Promise<void> {
 		// nx.json may not exist yet — skip
 	}
 }
-
-

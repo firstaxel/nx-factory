@@ -21,7 +21,7 @@ export async function addLibCommand(options: AddLibOptions): Promise<void> {
     printError({
       title:    "No package.json found",
       detail:   "Run this command from the monorepo root.",
-      recovery: [{ label: "", cmd: "cd <monorepo-root> && nx-shadcn add-lib" }],
+      recovery: [{ label: "", cmd: "cd <monorepo-root> && nx-factory add-lib" }],
     });
     process.exit(1); return;
   }
@@ -77,7 +77,7 @@ export async function addLibCommand(options: AddLibOptions): Promise<void> {
   if (await pathExists(libDir)) {
     printError({
       title:    `packages/${libName} already exists`,
-      recovery: [{ label: "Choose a different name:", cmd: `nx-shadcn add-lib --name ${libName}-2` }],
+      recovery: [{ label: "Choose a different name:", cmd: `nx-factory add-lib --name ${libName}-2` }],
     });
     process.exit(1); return;
   }

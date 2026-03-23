@@ -23,7 +23,7 @@ export async function addAppCommand(options: AddAppOptions): Promise<void> {
     printError({
       title:    "No package.json found",
       detail:   "Run this command from the monorepo root.",
-      recovery: [{ label: "", cmd: "cd my-monorepo && nx-shadcn add-app" }],
+      recovery: [{ label: "", cmd: "cd my-monorepo && nx-factory add-app" }],
     });
     process.exit(1); return;
   }

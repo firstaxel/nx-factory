@@ -16,7 +16,7 @@ export async function updateCommand(
     printError({
       title:    "UI package not found",
       detail:   "Run from the monorepo root.",
-      recovery: [{ label: "", cmd: "nx-shadcn update" }],
+      recovery: [{ label: "", cmd: "nx-factory update" }],
     });
     process.exit(1); return;
   }
@@ -66,7 +66,7 @@ export async function updateCommand(
     }
     printSuccess({
       title:    `${targets.length} component${targets.length > 1 ? "s" : ""} would be updated (dry run)`,
-      commands: [{ cmd: `nx-shadcn update ${targets.join(" ")}`, comment: "run without --dry-run to apply" }],
+      commands: [{ cmd: `nx-factory update ${targets.join(" ")}`, comment: "run without --dry-run to apply" }],
     });
     return;
   }

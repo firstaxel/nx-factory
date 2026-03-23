@@ -12,7 +12,7 @@ export async function listCommand(): Promise<void> {
     printError({
       title:    "UI package not found",
       detail:   "Run from the monorepo root.",
-      recovery: [{ label: "", cmd: "cd <monorepo-root> && nx-shadcn list" }],
+      recovery: [{ label: "", cmd: "cd <monorepo-root> && nx-factory list" }],
     });
     process.exit(1); return;
   }
@@ -77,7 +77,7 @@ export async function listCommand(): Promise<void> {
 
   if (installed.length === 0) {
     console.log(`  ${c.dim("No components installed yet.")}`);
-    console.log(`  ${c.dim("Run: ")}${c.purple("nx-shadcn add-component button card")}\n`);
+    console.log(`  ${c.dim("Run: ")}${c.purple("nx-factory add-component button card")}\n`);
     return;
   }
 
@@ -97,7 +97,7 @@ export async function listCommand(): Promise<void> {
   if (notExported.length > 0) {
     console.log(`\n  ${c.yellow("⚠")}  ${c.yellow(`${notExported.length} component${notExported.length > 1 ? "s" : ""} missing from barrel export:`)}`);
     console.log(`     ${c.dim(notExported.join(", "))}`);
-    console.log(`     ${c.dim("Run ")}${c.purple("nx-shadcn doctor")}${c.dim(" to fix automatically")}`);
+    console.log(`     ${c.dim("Run ")}${c.purple("nx-factory doctor")}${c.dim(" to fix automatically")}`);
   }
 
   console.log();

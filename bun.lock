@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "nx-shadcn-cli",
+      "name": "nx-factory-cli",
       "dependencies": {
         "chalk": "^5.3.0",
         "commander": "^12.1.0",

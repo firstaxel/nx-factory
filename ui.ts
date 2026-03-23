@@ -26,7 +26,7 @@ export const c = {
 export function printBanner(): void {
   const version = c.dim(`v${pkg.version}`);
   const logo    = c.purpleBold("NX↗");
-  const name    = c.whiteBold("nx-shadcn");
+  const name    = c.whiteBold("nx-factory");
   const tagline = c.dim("Monorepo scaffold · shadcn/ui + Tailwind v4");
 
   const pills = [

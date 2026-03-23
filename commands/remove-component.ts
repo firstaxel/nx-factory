@@ -15,7 +15,7 @@ export async function removeComponentCommand(
     printError({
       title:    "UI package not found",
       detail:   "Run from the monorepo root.",
-      recovery: [{ label: "", cmd: "cd <monorepo-root> && nx-shadcn remove-component button" }],
+      recovery: [{ label: "", cmd: "cd <monorepo-root> && nx-factory remove-component button" }],
     });
     process.exit(1); return;
   }
@@ -133,7 +133,7 @@ export async function removeComponentCommand(
         ? `${removed.length} component${removed.length > 1 ? "s" : ""} would be removed (dry run)`
         : `${removed.length} component${removed.length > 1 ? "s" : ""} removed`,
       commands: opts.dryRun
-        ? [{ cmd: "nx-shadcn remove-component " + removed.join(" "), comment: "run without --dry-run to apply" }]
+        ? [{ cmd: "nx-factory remove-component " + removed.join(" "), comment: "run without --dry-run to apply" }]
         : [{ cmd: `pnpm nx build @workspace/${cfg?.uiPackage ?? "ui"}`, comment: "rebuild the UI package" }],
     });
   }

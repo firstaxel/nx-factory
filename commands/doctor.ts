@@ -13,7 +13,7 @@ export async function doctorCommand(): Promise<void> {
   const cfg = await loadConfig();
 
   console.log(`\n  ${c.dim("─".repeat(44))}`);
-  console.log(`  ${c.whiteBold("nx-shadcn doctor")}  ${c.dim("workspace health check")}`);
+  console.log(`  ${c.whiteBold("nx-factory doctor")}  ${c.dim("workspace health check")}`);
   console.log(`  ${c.dim("─".repeat(44))}\n`);
 
   const checks: Check[] = [];
@@ -21,14 +21,14 @@ export async function doctorCommand(): Promise<void> {
 
   // ─── 1. Config file present ────────────────────────────────────────────────
   if (cfg) {
-    checks.push({ name: "Config file",        status: "pass", detail: "nx-shadcn.config.json found" });
+    checks.push({ name: "Config file",        status: "pass", detail: "nx-factory.config.json found" });
     checks.push({ name: "Package manager",    status: "pass", detail: cfg.pkgManager });
     checks.push({ name: "UI package",         status: "pass", detail: `packages/${cfg.uiPackage}` });
   } else {
     checks.push({
       name:   "Config file",
       status: "warn",
-      detail: "nx-shadcn.config.json not found — run `nx-shadcn init` or create manually",
+      detail: "nx-factory.config.json not found — run `nx-factory init` or create manually",
     });
   }
 
@@ -42,7 +42,7 @@ export async function doctorCommand(): Promise<void> {
     renderChecks(checks);
     printError({
       title:    "Critical: UI package directory missing",
-      recovery: [{ label: "Re-initialise:", cmd: "nx-shadcn init" }],
+      recovery: [{ label: "Re-initialise:", cmd: "nx-factory init" }],
     });
     return;
   }
@@ -220,7 +220,7 @@ export async function doctorCommand(): Promise<void> {
       title:    "All checks passed",
       commands: fixes.length > 0
         ? [{ cmd: "src/index.ts updated", comment: "barrel exports were fixed automatically" }]
-        : [{ cmd: "nx-shadcn list", comment: "view installed components" }],
+        : [{ cmd: "nx-factory list", comment: "view installed components" }],
     });
   } else {
     if (fixes.length > 0) {

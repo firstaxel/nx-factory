@@ -17,7 +17,7 @@ const program = new Command();
 printBanner();
 
 program
-  .name("nx-shadcn")
+  .name("nx-factory")
   .description("Initialize and manage an Nx monorepo with shared shadcn/ui components")
   .version("1.0.0");
 

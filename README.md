@@ -1,4 +1,4 @@
-# nx-shadcn-cli
+# nx-factory-cli
 
 A TypeScript CLI that spins up a production-ready **Nx monorepo** with a shared UI package powered by **shadcn/ui** and **Tailwind v4** — ready for any number of apps to consume.
 
@@ -21,17 +21,17 @@ A TypeScript CLI that spins up a production-ready **Nx monorepo** with a shared 
 
 ```bash
 # From npm (after publishing)
-npm install -g nx-shadcn-cli
+npm install -g nx-factory-cli
 
 # Or run directly
-npx nx-shadcn init
+npx nx-factory init
 ```
 
 ### Local development
 
 ```bash
 git clone <this-repo>
-cd nx-shadcn-cli
+cd nx-factory-cli
 pnpm install
 pnpm dev init             # runs the CLI in dev mode
 ```
@@ -40,14 +40,14 @@ pnpm dev init             # runs the CLI in dev mode
 
 ## Commands
 
-### `nx-shadcn init`
+### `nx-factory init`
 
 Interactively initializes a new Nx monorepo.
 
 ```bash
-nx-shadcn init
+nx-factory init
 # or with flags:
-nx-shadcn init --name my-design-system --pkg-manager pnpm
+nx-factory init --name my-design-system --pkg-manager pnpm
 ```
 
 **Prompts you for:**
@@ -84,15 +84,15 @@ my-monorepo/
 
 ---
 
-### `nx-shadcn add-app`
+### `nx-factory add-app`
 
 Scaffolds a new app inside `apps/` that's pre-wired to import from your shared UI package.
 
 ```bash
-nx-shadcn add-app
+nx-factory add-app
 # or with flags:
-nx-shadcn add-app --name dashboard --framework nextjs
-nx-shadcn add-app --name marketing --framework vite
+nx-factory add-app --name dashboard --framework nextjs
+nx-factory add-app --name marketing --framework vite
 ```
 
 **Supported frameworks:**
@@ -106,17 +106,17 @@ The new app will automatically have:
 
 ---
 
-### `nx-shadcn add-component`
+### `nx-factory add-component`
 
 Adds one or more shadcn components to the shared UI package and **automatically updates the barrel export** in `src/index.ts`.
 
 ```bash
 # Interactive picker
-nx-shadcn add-component
+nx-factory add-component
 
 # Or pass component names directly
-nx-shadcn add-component button card dialog
-nx-shadcn add-component data-table
+nx-factory add-component button card dialog
+nx-factory add-component data-table
 ```
 
 After running, import in any app:

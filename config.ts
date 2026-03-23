@@ -1,7 +1,7 @@
 import path from "path";
 import { pathExists, readJson, writeJson } from "./files.js";
 
-export const CONFIG_FILENAME = "nx-shadcn.config.json";
+export const CONFIG_FILENAME = "nx-factory.config.json";
 
 export interface NxShadcnConfig {
   workspaceName: string;
@@ -23,7 +23,7 @@ export async function findConfig(startDir = process.cwd()): Promise<string | nul
   return null;
 }
 
-/** Load config from the nearest nx-shadcn.config.json, or return null. */
+/** Load config from the nearest nx-factory.config.json, or return null. */
 export async function loadConfig(): Promise<NxShadcnConfig | null> {
   const file = await findConfig();
   if (!file) return null;
@@ -34,7 +34,7 @@ export async function loadConfig(): Promise<NxShadcnConfig | null> {
   }
 }
 
-/** Write config to cwd/nx-shadcn.config.json. */
+/** Write config to cwd/nx-factory.config.json. */
 export async function saveConfig(cfg: NxShadcnConfig): Promise<void> {
   const file = path.join(process.cwd(), CONFIG_FILENAME);
   await writeJson(file, cfg);

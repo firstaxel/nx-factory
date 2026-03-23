@@ -23,8 +23,8 @@ export async function addComponentCommand(components: string[]): Promise<void> {
       title:    "UI package not found",
       detail:   "Run from the monorepo root or packages/ui directory.",
       recovery: [
-        { label: "From monorepo root:", cmd: "nx-shadcn add-component button" },
-        { label: "Or from the UI package:", cmd: "cd packages/ui && nx-shadcn add-component button" },
+        { label: "From monorepo root:", cmd: "nx-factory add-component button" },
+        { label: "Or from the UI package:", cmd: "cd packages/ui && nx-factory add-component button" },
       ],
     });
     process.exit(1); return;

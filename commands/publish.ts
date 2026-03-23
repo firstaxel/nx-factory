@@ -27,7 +27,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
     printError({
       title:    "UI package not found",
       detail:   "Run from the monorepo root.",
-      recovery: [{ label: "", cmd: "cd <monorepo-root> && nx-shadcn publish" }],
+      recovery: [{ label: "", cmd: "cd <monorepo-root> && nx-factory publish" }],
     });
     process.exit(1); return;
   }
@@ -37,7 +37,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   if (!(await pathExists(pkgJsonPath))) {
     printError({
       title:    "No package.json found in UI package",
-      recovery: [{ label: "", cmd: "nx-shadcn doctor" }],
+      recovery: [{ label: "", cmd: "nx-factory doctor" }],
     });
     process.exit(1); return;
   }

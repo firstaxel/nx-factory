@@ -16,7 +16,7 @@ export async function addStorybookCommand(options: AddStorybookOptions): Promise
     printError({
       title:    "UI package not found",
       detail:   "Run from the monorepo root.",
-      recovery: [{ label: "", cmd: "cd <monorepo-root> && nx-shadcn add-storybook" }],
+      recovery: [{ label: "", cmd: "cd <monorepo-root> && nx-factory add-storybook" }],
     });
     process.exit(1); return;
   }
@@ -131,7 +131,7 @@ export default preview;
 const Welcome = () => (
   <div style={{ padding: "2rem", fontFamily: "sans-serif" }}>
     <h1>Welcome to @workspace/${pkgName}</h1>
-    <p>Add components with: <code>nx-shadcn add-component button</code></p>
+    <p>Add components with: <code>nx-factory add-component button</code></p>
   </div>
 );
 

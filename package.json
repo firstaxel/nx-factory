@@ -1,10 +1,10 @@
 {
-  "name": "nx-shadcn-cli",
+  "name": "nx-factory-cli",
   "version": "2.0.0",
   "description": "CLI to initialize and manage an Nx monorepo with shared shadcn/ui components + Tailwind v4",
   "type": "module",
   "bin": {
-    "nx-shadcn": "./dist/index.js"
+    "nx-factory": "./dist/index.js"
   },
   "files": [
     "dist",

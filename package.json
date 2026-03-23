@@ -1,0 +1,39 @@
+{
+  "name": "nx-shadcn-cli",
+  "version": "2.0.0",
+  "description": "CLI to initialize and manage an Nx monorepo with shared shadcn/ui components + Tailwind v4",
+  "type": "module",
+  "bin": {
+    "nx-shadcn": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev":   "tsx index.ts",
+    "start": "node dist/index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "chalk":      "^5.3.0",
+    "commander":  "^12.1.0",
+    "execa":      "^9.3.0",
+    "fs-extra":   "^11.2.0",
+    "inquirer":   "^10.2.2"
+  },
+  "devDependencies": {
+    "@types/fs-extra":  "^11.0.4",
+    "@types/inquirer":  "^9.0.7",
+    "@types/node":      "^22.0.0",
+    "tsx":              "^4.19.0",
+    "typescript":       "^5.6.0"
+  },
+  "keywords": [
+    "nx", "monorepo", "shadcn", "tailwind", "cli", "scaffold"
+  ],
+  "license": "MIT"
+}

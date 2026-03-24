@@ -2,7 +2,7 @@ import chalk from "chalk";
 import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
-const pkg = require("./package.json") as { version: string };
+const pkg = require("../package.json") as { version: string };
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 // One place to change colors for the whole CLI.

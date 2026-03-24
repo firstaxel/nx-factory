@@ -23,7 +23,7 @@ export async function addAppCommand(options: AddAppOptions): Promise<void> {
     printError({
       title:    "No package.json found",
       detail:   "Run this command from the monorepo root.",
-      recovery: [{ label: "", cmd: "cd my-monorepo && nx-factory add-app" }],
+      recovery: [{ label: "", cmd: "cd my-monorepo && nx-shadcn add-app" }],
     });
     process.exit(1); return;
   }
@@ -270,7 +270,6 @@ async function patchNextConfig(appDir: string, uiPkgName: string): Promise<void>
         );
       }
     } else {
-      // create-next-app writes: const nextConfig: NextConfig = {};
       src = src.replace(
         /(const nextConfig[^=]*=\s*\{)/,
         `$1\n  transpilePackages: ["@workspace/${uiPkgName}"],`,
@@ -287,12 +286,28 @@ async function patchNextConfig(appDir: string, uiPkgName: string): Promise<void>
 
     let src = await fs.readFile(layoutPath, "utf-8");
     if (!src.includes(`@workspace/${uiPkgName}`)) {
-      // Insert after the last consecutive import line
       src = src.replace(
         /((?:^import[^\n]+\n)+)/m,
         `$1import "@workspace/${uiPkgName}/styles";\n`,
       );
       await fs.writeFile(layoutPath, src, "utf-8");
+    }
+    break;
+  }
+
+  // Patch globals.css — add @source so Tailwind scans the app's own files.
+  // create-next-app writes src/app/globals.css with @tailwind directives;
+  // we prepend @source before those so all app utilities are included.
+  for (const cssRel of ["src/app/globals.css", "app/globals.css"]) {
+    const cssPath = path.join(appDir, cssRel);
+    if (!(await pathExists(cssPath))) continue;
+
+    let css = await fs.readFile(cssPath, "utf-8");
+
+    if (!css.includes("@source")) {
+      // Prepend @source before any existing @tailwind / @import lines
+      css = `/* Ensure Tailwind scans this app's source files */\n@source "@workspace/${uiPkgName}/**/*.{ts,tsx,js,jsx}";\n\n${css}`;
+      await fs.writeFile(cssPath, css, "utf-8");
     }
     break;
   }
@@ -335,6 +350,21 @@ async function patchViteConfig(appDir: string, uiPkgName: string): Promise<void>
     }
     break;
   }
+
+  // Write/patch the app's local index.css to add an @source for its own files.
+  // The @workspace/ui/styles already covers the UI package and workspace-wide
+  // paths, but utilities used only in this app need a local @source too.
+  for (const cssRel of ["src/index.css", "src/app.css", "index.css"]) {
+    const cssPath = path.join(appDir, cssRel);
+    if (!(await pathExists(cssPath))) continue;
+
+    let css = await fs.readFile(cssPath, "utf-8");
+    if (!css.includes("@source")) {
+      css = `/* Ensure Tailwind scans this app's source files */\n@source "@workspace/${uiPkgName}/**/*.{ts,tsx,js,jsx}";\n\n${css}`;
+      await fs.writeFile(cssPath, css, "utf-8");
+    }
+    break;
+  }
 }
 
 // ── Remix ─────────────────────────────────────────────────────────────────────
@@ -372,6 +402,19 @@ async function patchRemixConfig(appDir: string, uiPkgName: string): Promise<void
         `$1import "@workspace/${uiPkgName}/styles";\n`,
       );
       await fs.writeFile(rootPath, src, "utf-8");
+    }
+    break;
+  }
+
+  // Patch or create the app's CSS entry with a local @source directive
+  for (const cssRel of ["app/globals.css", "app/tailwind.css", "app/root.css"]) {
+    const cssPath = path.join(appDir, cssRel);
+    if (!(await pathExists(cssPath))) continue;
+
+    let css = await fs.readFile(cssPath, "utf-8");
+    if (!css.includes("@source")) {
+      css = `/* Ensure Tailwind scans this app's source files */\n@source "@workspace/${uiPkgName}/**/*.{ts,tsx,js,jsx}";\n\n${css}`;
+      await fs.writeFile(cssPath, css, "utf-8");
     }
     break;
   }

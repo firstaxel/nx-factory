@@ -56,7 +56,7 @@ export async function doctorCommand(): Promise<void> {
       const style    = compJson?.style ?? "unknown";
       const aliases  = compJson?.aliases ?? {};
 
-      // Auto-fix: if aliases use relative paths (./src/...) swap them to @/ style
+      // Auto-fix: if aliases use relative paths (./...) swap them to @workspace/<uiPkgName>/... style
       const hasRelativePaths = Object.values(aliases).some(
         (v) => typeof v === "string" && v.startsWith("./"),
       );
@@ -65,18 +65,18 @@ export async function doctorCommand(): Promise<void> {
         const fixed = {
           ...compJson,
           aliases: {
-            components: "@/components",
-            utils:      "@/lib/utils",
-            ui:         "@/components/ui",
-            lib:        "@/lib",
-            hooks:      "@/hooks",
+            components: `@workspace/${uiPkgName}/components`,
+            utils:      `@workspace/${uiPkgName}/lib/utils`,
+            ui:         `@workspace/${uiPkgName}/components/ui`,
+            lib:        `@workspace/${uiPkgName}/lib`,
+            hooks:      `@workspace/${uiPkgName}/hooks`,
           },
         };
         await fs.writeJson(compJsonPath, fixed, { spaces: 2 });
         checks.push({
           name:   "components.json",
           status: "fix",
-          detail: `aliases rewritten from ./src/... to @/... (shadcn requires path aliases)`,
+          detail: `aliases rewritten from ./... to @workspace/${uiPkgName}/...`,
         });
       } else {
         checks.push({ name: "components.json", status: "pass", detail: `style: ${style}` });
@@ -90,7 +90,7 @@ export async function doctorCommand(): Promise<void> {
 
   // ─── 4. tsup entry point ──────────────────────────────────────────────────
   const tsupCfgPath = path.join(uiPkgDir, "tsup.config.ts");
-  const barrelPath  = path.join(uiPkgDir, "src/index.ts");
+  const barrelPath  = path.join(uiPkgDir, "index.ts");
 
   if (await pathExists(tsupCfgPath)) {
     checks.push({ name: "tsup.config.ts", status: "pass", detail: "build config present" });
@@ -98,29 +98,34 @@ export async function doctorCommand(): Promise<void> {
     checks.push({ name: "tsup.config.ts", status: "warn", detail: "missing — `pnpm build` will not work" });
   }
 
-  // ─── 4b. tsconfig paths (@/* alias required by shadcn) ────────────────────
+  // ─── 4b. tsconfig paths (@workspace alias required by this CLI setup) ─────
   const tsconfigPath = path.join(uiPkgDir, "tsconfig.json");
   if (await pathExists(tsconfigPath)) {
     try {
       const tsconfig = await fs.readJson(tsconfigPath);
       const paths    = tsconfig?.compilerOptions?.paths ?? {};
-      const hasAlias = "@/*" in paths || "@/components" in paths;
+      const hasAlias = `@workspace/${uiPkgName}/*` in paths || "@workspace/*" in paths;
 
       if (!hasAlias) {
         // Auto-fix: inject baseUrl + paths
         tsconfig.compilerOptions = {
           ...tsconfig.compilerOptions,
           baseUrl: ".",
-          paths: { "@/*": ["./src/*"] },
+          paths: {
+            ...(tsconfig.compilerOptions?.paths ?? {}),
+            "@workspace/*": ["../../packages/*"],
+            [`@workspace/${uiPkgName}`]: ["./index.tsx"],
+            [`@workspace/${uiPkgName}/*`]: ["./*"],
+          },
         };
         await fs.writeJson(tsconfigPath, tsconfig, { spaces: 2 });
         checks.push({
           name:   "tsconfig paths",
           status: "fix",
-          detail: `added baseUrl + paths: { "@/*": ["./src/*"] }`,
+          detail: `added @workspace aliases for ${uiPkgName}`,
         });
       } else {
-        checks.push({ name: "tsconfig paths", status: "pass", detail: `@/* alias present` });
+        checks.push({ name: "tsconfig paths", status: "pass", detail: `@workspace alias present` });
       }
     } catch {
       checks.push({ name: "tsconfig paths", status: "warn", detail: "could not parse tsconfig.json" });
@@ -130,7 +135,7 @@ export async function doctorCommand(): Promise<void> {
   }
 
   // ─── 5. Barrel export sync ────────────────────────────────────────────────
-  const uiComponentsDir = path.join(uiPkgDir, "src/components/ui");
+  const uiComponentsDir = path.join(uiPkgDir, "components/ui");
   let installed: string[] = [];
 
   if (await pathExists(uiComponentsDir)) {
@@ -219,7 +224,7 @@ export async function doctorCommand(): Promise<void> {
     printSuccess({
       title:    "All checks passed",
       commands: fixes.length > 0
-        ? [{ cmd: "src/index.ts updated", comment: "barrel exports were fixed automatically" }]
+        ? [{ cmd: "index.ts updated", comment: "barrel exports were fixed automatically" }]
         : [{ cmd: "nx-factory list", comment: "view installed components" }],
     });
   } else {

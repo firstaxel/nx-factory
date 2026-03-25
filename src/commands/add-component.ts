@@ -59,11 +59,14 @@ export async function addComponentCommand(components: string[]): Promise<void> {
 
     await updateBarrelExports(uiPkgDir, selectedComponents);
 
-    const importLine = `import { ${selectedComponents.map(toComponentName).join(", ")} } from "@workspace/${pkgName}";`;
+    const importCommands = selectedComponents.map((comp) => ({
+      cmd: `import { ${toComponentName(comp)} } from "@workspace/${pkgName}/components/ui/${comp}";`,
+      comment: "direct import (no barrel)",
+    }));
 
     printSuccess({
       title:    `${selectedComponents.length} component${selectedComponents.length > 1 ? "s" : ""} added`,
-      commands: [{ cmd: importLine, comment: "use in any app" }],
+      commands: importCommands,
     });
   } catch (err) {
     printError({
@@ -99,8 +102,11 @@ async function detectUiPackageDir(): Promise<string | null> {
 }
 
 async function updateBarrelExports(uiPkgDir: string, components: string[]): Promise<void> {
-  const indexPath = path.join(uiPkgDir, "src/index.ts");
+  const indexTsxPath = path.join(uiPkgDir, "index.tsx");
+  const indexTsPath = path.join(uiPkgDir, "index.ts");
+  const indexPath = (await pathExists(indexTsxPath)) ? indexTsxPath : indexTsPath;
   const { default: fs } = await import("fs-extra");
+  const pkgName = path.basename(uiPkgDir);
 
   let existing = "";
   if (await pathExists(indexPath)) {
@@ -108,14 +114,14 @@ async function updateBarrelExports(uiPkgDir: string, components: string[]): Prom
   }
 
   const newExports = components
-    .filter((comp) => !existing.includes(`./components/ui/${comp}`))
-    .map((comp)    => `export * from "./components/ui/${comp}";`)
+    .filter((comp) => !existing.includes(`@workspace/${pkgName}/components/ui/${comp}`))
+    .map((comp)    => `export * from "@workspace/${pkgName}/components/ui/${comp}";`)
     .join("\n");
 
   if (newExports) {
     if (existing && !existing.endsWith("\n")) existing += "\n";
     await writeFile(indexPath, existing + newExports + "\n");
-    console.log(`  ${c.dim("✓")} ${c.dim("barrel exports updated in src/index.ts")}`);
+    console.log(`  ${c.dim("✓")} ${c.dim("barrel exports updated in index.ts")}`);
   }
 }
 

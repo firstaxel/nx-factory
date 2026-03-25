@@ -1,7 +1,7 @@
 import inquirer from "inquirer";
 import path from "path";
 import { run, runInDir, pmAdd, pmx, pmxArgs, pmWorkspaceProtocol } from "../exec.js";
-import { writeJson, writeFile, ensureDir } from "../files.js";
+import { writeJson, writeFile, ensureDir, pathExists } from "../files.js";
 import { saveConfig } from "../config.js";
 import { scaffoldExampleApp } from "./add-app.js";
 import {
@@ -146,7 +146,6 @@ export async function initCommand(options: InitOptions): Promise<void> {
 	await step("Write shadcn config", async () => {
 		await writeShadcnConfig(cwd, uiPkgName, baseColor);
 		await writeTailwindCss(cwd, uiPkgName, baseColor);
-		await writeTsupConfig(cwd, uiPkgName);
 	});
 
 	if (initialComponents.length > 0) {
@@ -155,6 +154,7 @@ export async function initCommand(options: InitOptions): Promise<void> {
 		);
 	}
 
+
 	await step("Update nx.json", () => updateNxJson(cwd, uiPkgName));
 
 	if (addExampleApp) {
@@ -162,6 +162,10 @@ export async function initCommand(options: InitOptions): Promise<void> {
 			scaffoldExampleApp(cwd, "example-app", uiPkgName, pm),
 		);
 	}
+
+	await step("Update tsconfig.json", () => updateTsConfig(cwd, uiPkgName));
+
+	await step("Update package.json", () => updatePackageJson(cwd));
 
 	await step("Install all dependencies", async () => {
 		try {
@@ -211,9 +215,9 @@ async function scaffoldUiPackage(
 ): Promise<void> {
 	const pkgDir = path.join(cwd, "packages", uiPkgName);
 
-	await ensureDir(path.join(pkgDir, "src/components"));
-	await ensureDir(path.join(pkgDir, "src/lib"));
-	await ensureDir(path.join(pkgDir, "src/styles"));
+	await ensureDir(path.join(pkgDir, "components"));
+	await ensureDir(path.join(pkgDir, "lib"));
+	await ensureDir(path.join(pkgDir, "styles"));
 
 	// package.json for the UI package
 	await writeJson(path.join(pkgDir, "package.json"), {
@@ -221,30 +225,16 @@ async function scaffoldUiPackage(
 		version: "0.0.1",
 		private: true,
 		type: "module",
-		exports: {
-			".": {
-				import: "./dist/index.js",
-				types: "./dist/index.d.ts",
-			},
-			"./styles": "./src/styles/globals.css",
-		},
-		main: "./dist/index.js",
-		types: "./dist/index.d.ts",
-		scripts: {
-			build: "tsup",
-			"build:watch": "tsup --watch",
-			lint: "eslint src/",
-		},
+
 		peerDependencies: {
-			react: "^18 || ^19",
-			"react-dom": "^18 || ^19",
+			react: " ^19",
+			"react-dom": " ^19",
 		},
 		devDependencies: {
 			"@types/react": "^19.0.0",
 			"@types/react-dom": "^19.0.0",
 			react: "^19.0.0",
 			"react-dom": "^19.0.0",
-			tsup: "^8.3.0",
 			typescript: "^5.6.0",
 		},
 		dependencies: {
@@ -268,20 +258,19 @@ async function scaffoldUiPackage(
 			sourceMap: true,
 			esModuleInterop: true,
 			skipLibCheck: true,
-			outDir: "dist",
-			rootDir: "src",
 			baseUrl: ".",
 			paths: {
-				"@/*": ["./src/*"],
+				"@workspace/*": ["../../packages/*"],
+				[`@workspace/${uiPkgName}/*`]: ["./*"],
 			},
 		},
-		include: ["src"],
-		exclude: ["node_modules", "dist"],
+		include: ["**/*"],
+		exclude: ["node_modules"],
 	});
 
-	// src/lib/utils.ts (cn helper)
+	// lib/utils.ts (cn helper)
 	await writeFile(
-		path.join(pkgDir, "src/lib/utils.ts"),
+		path.join(pkgDir, "lib/utils.ts"),
 		`import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -291,12 +280,12 @@ export function cn(...inputs: ClassValue[]) {
 `,
 	);
 
-	// src/index.ts — barrel export
+	// index.ts — barrel export
 	await writeFile(
-		path.join(pkgDir, "src/index.ts"),
+		path.join(pkgDir, "index.tsx"),
 		`// Auto-generated barrel — add new component exports here
 // Example: export { Button, type ButtonProps } from "./components/button";
-export { cn } from "./lib/utils";
+export { cn } from "@workspace/${uiPkgName}/lib/utils";
 `,
 	);
 }
@@ -311,7 +300,7 @@ async function installUiDeps(
 	await runInDir(
 		pkgDir,
 		pm,
-		[addCmd, "tailwindcss@^4.0.0", "@tailwindcss/vite@^4.0.0"],
+		[addCmd, "tailwindcss@^4.0.0"],
 		"Installing Tailwind v4",
 	);
 	await runInDir(
@@ -335,16 +324,16 @@ async function writeShadcnConfig(
 		tsx: true,
 		tailwind: {
 			config: "",
-			css: "src/styles/globals.css",
+			css: "styles/globals.css",
 			baseColor,
 			cssVariables: true,
 		},
 		aliases: {
-			components: "@/components",
-			utils: "@/lib/utils",
-			ui: "@/components/ui",
-			lib: "@/lib",
-			hooks: "@/hooks",
+			components: `@workspace/${uiPkgName}/components`,
+			utils: `@workspace/${uiPkgName}/lib/utils`,
+			ui: `@workspace/${uiPkgName}/components/ui`,
+			lib: `@workspace/${uiPkgName}/lib`,
+			hooks: `@workspace/${uiPkgName}/hooks`,
 		},
 		iconLibrary: "lucide",
 	});
@@ -486,7 +475,7 @@ async function writeTailwindCss(cwd: string, uiPkgName: string, baseColor = "neu
 	const { radius, ...lightVars } = palette.light;
 
 	await writeFile(
-		path.join(pkgDir, "src/styles/globals.css"),
+		path.join(pkgDir, "styles/globals.css"),
 		`@import "tailwindcss";
 @import "tw-animate-css";
 
@@ -500,11 +489,7 @@ async function writeTailwindCss(cwd: string, uiPkgName: string, baseColor = "neu
  * Apps can extend this by adding their own @source lines in their
  * local globals.css after importing this file.
  */
-@source "../components/**/*.{ts,tsx}";
-@source "../../../apps/*/src/**/*.{ts,tsx,js,jsx}";
-@source "../../../apps/*/app/**/*.{ts,tsx,js,jsx}";
-@source "../../../apps/*/components/**/*.{ts,tsx,js,jsx}";
-@source "../../../apps/*/pages/**/*.{ts,tsx,js,jsx}";
+@source "../**/*.{ts,tsx}";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -545,26 +530,6 @@ ${buildCssVars(palette.dark)}
 	);
 }
 
-async function writeTsupConfig(cwd: string, uiPkgName: string): Promise<void> {
-	const pkgDir = path.join(cwd, "packages", uiPkgName);
-	await writeFile(
-		path.join(pkgDir, "tsup.config.ts"),
-		`import { defineConfig } from "tsup";
-
-export default defineConfig({
-  entry: ["src/index.ts"],
-  format: ["esm"],
-  dts: true,
-  sourcemap: true,
-  clean: true,
-  external: ["react", "react-dom"],
-  treeshake: true,
-  splitting: false,
-});
-`,
-	);
-}
-
 async function installShadcnComponents(
 	cwd: string,
 	uiPkgName: string,
@@ -578,7 +543,7 @@ async function installShadcnComponents(
 			pmx(pm),
 			pmxArgs(pm, "shadcn@latest", ["add", "--yes", ...components]),
 		);
-		await updateBarrelExports(pkgDir, components);
+		await updateBarrelExports(pkgDir, uiPkgName, components);
 	} catch {
 		printWarn(
 			"Failed to add shadcn components",
@@ -587,8 +552,8 @@ async function installShadcnComponents(
 	}
 }
 
-async function updateBarrelExports(pkgDir: string, components: string[]): Promise<void> {
-	const indexPath = path.join(pkgDir, "src/index.ts");
+async function updateBarrelExports(pkgDir: string, uiPkgName: string, components: string[]): Promise<void> {
+	const indexPath = path.join(pkgDir, "index.tsx");
 	const { default: fs } = await import("fs-extra");
 	let existing = "";
 	try {
@@ -597,8 +562,8 @@ async function updateBarrelExports(pkgDir: string, components: string[]): Promis
 		// file doesn't exist yet — start fresh
 	}
 	const newExports = components
-		.filter((c) => !existing.includes(`./components/ui/${c}`))
-		.map((c) => `export * from "./components/ui/${c}";`)
+		.filter((c) => !existing.includes(`@workspace/${uiPkgName}/components/ui/${c}`))
+		.map((c) => `export * from "@workspace/${uiPkgName}/components/ui/${c}";`)
 		.join("\n");
 	if (newExports) {
 		if (existing && !existing.endsWith("\n")) existing += "\n";
@@ -626,4 +591,44 @@ async function updateNxJson(cwd: string, uiPkgName: string): Promise<void> {
 	}
 }
 
+// Update the generated workspace package.json with the expected workspaces entries.
+async function updatePackageJson(cwd: string): Promise<void> {
+	const pkgJsonPath = path.join(cwd, "package.json");
+	const { default: fs } = await import("fs-extra");
+	if (!(await pathExists(pkgJsonPath))) return;
+	const pkgJson = await fs.readJson(pkgJsonPath);
 
+	const required = ["packages/*", "apps/*"];
+	if (Array.isArray(pkgJson.workspaces)) {
+		pkgJson.workspaces = Array.from(new Set([...pkgJson.workspaces, ...required]));
+	} else if (pkgJson.workspaces && Array.isArray(pkgJson.workspaces.packages)) {
+		pkgJson.workspaces.packages = Array.from(new Set([...pkgJson.workspaces.packages, ...required]));
+	} else {
+		pkgJson.workspaces = required;
+	}
+
+	await fs.writeJson(pkgJsonPath, pkgJson, { spaces: 2 });
+}
+
+
+// Update scaffolded app tsConfig to extend the typescript config of the root workspace
+async function updateTsConfig(cwd: string, uiPkgName: string): Promise<void> {
+	const tsConfigPath = path.join(cwd, "apps/example-app/tsconfig.json");
+	const { default: fs } = await import("fs-extra");
+	if (!(await pathExists(tsConfigPath))) return;
+	const tsConfig = await fs.readJson(tsConfigPath);
+	tsConfig.extends = "../../tsconfig.base.json";
+	const currentPaths = tsConfig.compilerOptions?.paths ?? {};
+	tsConfig.compilerOptions = {
+		...(tsConfig.compilerOptions ?? {}),
+		paths: {
+			...currentPaths,
+			"@/*": ["./*"],
+			"@workspace/*": ["../../packages/*"],
+		},
+	};
+	const includeEntries: string[] = Array.isArray(tsConfig.include) ? tsConfig.include : [];
+	const requiredIncludes = ["../../packages/**/*.ts", "../../packages/**/*.tsx"];
+	tsConfig.include = Array.from(new Set([...includeEntries, ...requiredIncludes]));
+	await fs.writeJson(tsConfigPath, tsConfig, { spaces: 2 });
+}

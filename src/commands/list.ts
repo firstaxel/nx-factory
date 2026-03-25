@@ -20,7 +20,7 @@ export async function listCommand(): Promise<void> {
   const { default: fs } = await import("fs-extra");
 
   // ─── Installed components ──────────────────────────────────────────────────
-  const uiComponentsDir = path.join(uiPkgDir, "src/components/ui");
+  const uiComponentsDir = path.join(uiPkgDir, "components/ui");
   let installed: string[] = [];
 
   if (await pathExists(uiComponentsDir)) {
@@ -32,7 +32,7 @@ export async function listCommand(): Promise<void> {
   }
 
   // ─── Barrel export check ───────────────────────────────────────────────────
-  const barrelPath = path.join(uiPkgDir, "src/index.ts");
+  const barrelPath = path.join(uiPkgDir, "index.ts");
   let barrelContent = "";
   if (await pathExists(barrelPath)) {
     barrelContent = await fs.readFile(barrelPath, "utf-8");

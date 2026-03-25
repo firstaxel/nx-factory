@@ -58,7 +58,7 @@ export async function addStorybookCommand(options: AddStorybookOptions): Promise
       `import type { StorybookConfig } from "@storybook/react-vite";
 
 const config: StorybookConfig = {
-  stories:   ["../src/**/*.stories.@(ts|tsx)"],
+  stories:   ["../**/*.stories.@(ts|tsx)"],
   addons:    [
     "@storybook/addon-essentials",
     "@storybook/addon-a11y",
@@ -76,7 +76,7 @@ export default config;
     await writeFile(
       path.join(storybookDir, "preview.ts"),
       `import type { Preview } from "@storybook/react";
-import "../src/styles/globals.css";
+import "../styles/globals.css";
 
 const preview: Preview = {
   parameters: {
@@ -109,7 +109,7 @@ export default preview;
   });
 
   await step(`Generate ${installed.length} component stories`, async () => {
-    const storiesDir = path.join(uiPkgDir, "src/stories");
+    const storiesDir = path.join(uiPkgDir, "stories");
     await ensureDir(storiesDir);
 
     for (const comp of installed) {
@@ -155,7 +155,7 @@ export const Default: Story = {};
       { cmd: `${pm} nx run ${pkgName}:build-storybook`, comment: "build static output" },
     ],
     tips: [
-      { label: "Stories live at:", cmd: `packages/${pkgName}/src/stories/` },
+      { label: "Stories live at:", cmd: `packages/${pkgName}/stories/` },
     ],
   });
 }
@@ -181,7 +181,7 @@ export const Default: Story = {};
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 async function getInstalledComponents(uiPkgDir: string): Promise<string[]> {
-  const dir = path.join(uiPkgDir, "src/components/ui");
+  const dir = path.join(uiPkgDir, "components/ui");
   if (!(await pathExists(dir))) return [];
   const { default: fs } = await import("fs-extra");
   const files = await fs.readdir(dir);

@@ -135,7 +135,7 @@ export async function addLibCommand(options: AddLibOptions): Promise<void> {
       `import { defineConfig } from "tsup";
 
 export default defineConfig({
-  entry:     ["src/index.ts"],
+  entry:     ["index.ts"],
   format:    ["esm"],
   dts:       true,
   sourcemap: true,
@@ -147,7 +147,7 @@ export default defineConfig({
 
     // Seed index.ts based on lib type
     await writeFile(
-      path.join(libDir, "src/index.ts"),
+      path.join(libDir, "index.ts"),
       getIndexContent(libName, libType),
     );
   });

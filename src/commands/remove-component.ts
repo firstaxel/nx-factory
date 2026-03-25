@@ -85,7 +85,7 @@ export async function removeComponentCommand(
   const failed:  string[] = [];
 
   for (const comp of components) {
-    const compFile = path.join(uiPkgDir, "src/components/ui", `${comp}.tsx`);
+    const compFile = path.join(uiPkgDir, "components/ui", `${comp}.tsx`);
     const exists   = await pathExists(compFile);
 
     if (!exists) {
@@ -94,7 +94,7 @@ export async function removeComponentCommand(
     }
 
     if (opts.dryRun) {
-      console.log(`  ${c.purpleDim("│")}  ${c.dim(`[dry run] would remove: src/components/ui/${comp}.tsx`)}`);
+      console.log(`  ${c.purpleDim("│")}  ${c.dim(`[dry run] would remove: components/ui/${comp}.tsx`)}`);
       removed.push(comp);
       continue;
     }
@@ -109,7 +109,7 @@ export async function removeComponentCommand(
 
   // ─── Update barrel exports ─────────────────────────────────────────────────
   if (removed.length > 0 && !opts.dryRun) {
-    const barrelPath = path.join(uiPkgDir, "src/index.ts");
+    const barrelPath = path.join(uiPkgDir, "index.ts");
     if (await pathExists(barrelPath)) {
       let barrel = await fs.readFile(barrelPath, "utf-8");
       for (const comp of removed) {
@@ -124,7 +124,7 @@ export async function removeComponentCommand(
   }
 
   if (failed.length > 0) {
-    printWarn(`Failed to remove: ${failed.join(", ")}`, "Try removing manually from src/components/ui/");
+    printWarn(`Failed to remove: ${failed.join(", ")}`, "Try removing manually from components/ui/");
   }
 
   if (removed.length > 0) {
@@ -140,7 +140,7 @@ export async function removeComponentCommand(
 }
 
 async function getInstalledComponents(uiPkgDir: string): Promise<string[]> {
-  const dir = path.join(uiPkgDir, "src/components/ui");
+  const dir = path.join(uiPkgDir, "components/ui");
   if (!(await pathExists(dir))) return [];
   const { default: fs } = await import("fs-extra");
   const files = await fs.readdir(dir);

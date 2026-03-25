@@ -288,7 +288,7 @@ async function patchNextConfig(appDir: string, uiPkgName: string): Promise<void>
     if (!src.includes(`@workspace/${uiPkgName}`)) {
       src = src.replace(
         /((?:^import[^\n]+\n)+)/m,
-        `$1import "@workspace/${uiPkgName}/styles";\n`,
+        `$1import "@workspace/${uiPkgName}/styles/globals.css";\n`,
       );
       await fs.writeFile(layoutPath, src, "utf-8");
     }
@@ -306,11 +306,13 @@ async function patchNextConfig(appDir: string, uiPkgName: string): Promise<void>
 
     if (!css.includes("@source")) {
       // Prepend @source before any existing @tailwind / @import lines
-      css = `/* Ensure Tailwind scans this app's source files */\n@source "@workspace/${uiPkgName}/**/*.{ts,tsx,js,jsx}";\n\n${css}`;
+      css = `/* Ensure Tailwind scans this app's source files */\n@import "@workspace/${uiPkgName}/styles/globals.css";\n\n${css}`;
       await fs.writeFile(cssPath, css, "utf-8");
     }
     break;
   }
+
+  await patchAppTsConfig(appDir);
 }
 
 // ── Vite ──────────────────────────────────────────────────────────────────────
@@ -345,7 +347,7 @@ async function patchViteConfig(appDir: string, uiPkgName: string): Promise<void>
 
     let src = await fs.readFile(mainPath, "utf-8");
     if (!src.includes(`@workspace/${uiPkgName}`)) {
-      src = `import "@workspace/${uiPkgName}/styles";\n${src}`;
+      src = `import "@workspace/${uiPkgName}/styles/globals.css";\n${src}`;
       await fs.writeFile(mainPath, src, "utf-8");
     }
     break;
@@ -360,11 +362,12 @@ async function patchViteConfig(appDir: string, uiPkgName: string): Promise<void>
 
     let css = await fs.readFile(cssPath, "utf-8");
     if (!css.includes("@source")) {
-      css = `/* Ensure Tailwind scans this app's source files */\n@source "@workspace/${uiPkgName}/**/*.{ts,tsx,js,jsx}";\n\n${css}`;
+      css = `/* Ensure Tailwind scans this app's source files */\n@import "@workspace/${uiPkgName}/styles/globals.css";\n\n${css}`;
       await fs.writeFile(cssPath, css, "utf-8");
     }
     break;
   }
+  await patchAppTsConfig(appDir);
 }
 
 // ── Remix ─────────────────────────────────────────────────────────────────────
@@ -399,7 +402,7 @@ async function patchRemixConfig(appDir: string, uiPkgName: string): Promise<void
     if (!src.includes(`@workspace/${uiPkgName}`)) {
       src = src.replace(
         /((?:^import[^\n]+\n)+)/m,
-        `$1import "@workspace/${uiPkgName}/styles";\n`,
+        `$1import "@workspace/${uiPkgName}/styles/globals.css";\n`,
       );
       await fs.writeFile(rootPath, src, "utf-8");
     }
@@ -413,11 +416,13 @@ async function patchRemixConfig(appDir: string, uiPkgName: string): Promise<void
 
     let css = await fs.readFile(cssPath, "utf-8");
     if (!css.includes("@source")) {
-      css = `/* Ensure Tailwind scans this app's source files */\n@source "@workspace/${uiPkgName}/**/*.{ts,tsx,js,jsx}";\n\n${css}`;
+      css = `/* Ensure Tailwind scans this app's source files */\n@import "@workspace/${uiPkgName}/styles/globals.css";\n\n${css}`;
       await fs.writeFile(cssPath, css, "utf-8");
     }
     break;
   }
+
+  await patchAppTsConfig(appDir);
 }
 
 // ── Expo ──────────────────────────────────────────────────────────────────────
@@ -473,9 +478,36 @@ module.exports = {
     }
     break;
   }
+
+  await patchAppTsConfig(appDir);
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+async function patchAppTsConfig(appDir: string): Promise<void> {
+  const { default: fs } = await import("fs-extra");
+  const tsConfigPath = path.join(appDir, "tsconfig.json");
+  if (!(await pathExists(tsConfigPath))) return;
+
+  const tsConfig = await fs.readJson(tsConfigPath);
+  tsConfig.extends = "../../tsconfig.base.json";
+
+  const currentPaths = tsConfig.compilerOptions?.paths ?? {};
+  tsConfig.compilerOptions = {
+    ...(tsConfig.compilerOptions ?? {}),
+    paths: {
+      ...currentPaths,
+      "@/*": ["./src/*"],
+      "@workspace/*": ["../../packages/*"],
+    },
+  };
+
+  const includeEntries: string[] = Array.isArray(tsConfig.include) ? tsConfig.include : [];
+  const requiredIncludes = ["../../packages/**/*.ts", "../../packages/**/*.tsx"];
+  tsConfig.include = Array.from(new Set([...includeEntries, ...requiredIncludes]));
+
+  await fs.writeJson(tsConfigPath, tsConfig, { spaces: 2 });
+}
 
 function frameworkCliName(framework: string): string {
   switch (framework) {

@@ -112,7 +112,7 @@ export async function updateCommand(
 }
 
 async function getInstalledComponents(uiPkgDir: string): Promise<string[]> {
-  const dir = path.join(uiPkgDir, "src/components/ui");
+  const dir = path.join(uiPkgDir, "components/ui");
   if (!(await pathExists(dir))) return [];
   const { default: fs } = await import("fs-extra");
   const files = await fs.readdir(dir);

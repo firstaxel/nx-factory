@@ -3,6 +3,7 @@ import path from "path";
 import { pathExists, writeFile, readJson, writeJson } from "../files.js";
 import { pmWorkspaceProtocol, detectPackageManager, pmx, pmxArgs, runInteractive } from "../exec.js";
 import { loadConfig } from "../config.js";
+import { requireMonorepoRoot, MonorepoRootNotFoundError } from "../resolve-root.js";
 import { q, detected, createStepRunner, printSection, printSuccess, printError, c } from "../ui.js";
 
 interface AddAppOptions {
@@ -14,25 +15,46 @@ interface AddAppOptions {
 
 interface WorkspacePackageJson {
   name?: string;
-  workspaces?: string[];
+  workspaces?: string[] | { packages: string[] };
 }
 
 export async function addAppCommand(options: AddAppOptions): Promise<void> {
-  const pkgJsonPath = path.join(process.cwd(), "package.json");
+  // ── Resolve monorepo root from wherever the user invokes this ──────────────
+  let workspaceRoot: string;
+  try {
+    workspaceRoot = await requireMonorepoRoot();
+  } catch (err) {
+    if (err instanceof MonorepoRootNotFoundError) {
+      printError({
+        title:    "Could not find monorepo root",
+        detail:   String(err),
+        recovery: [{ label: "Run from inside your nx-factory workspace:", cmd: "cd <monorepo-root>" }],
+      });
+    } else {
+      printError({
+        title:    "Unexpected error",
+        detail:   String(err),
+        recovery: [{ label: "", cmd: "cd <monorepo-root> && nx-factory add-app" }],
+      });
+    }
+    process.exit(1);
+  }
+
+  const pkgJsonPath = path.join(workspaceRoot, "package.json");
   if (!(await pathExists(pkgJsonPath))) {
     printError({
-      title:    "No package.json found",
-      detail:   "Run this command from the monorepo root.",
-      recovery: [{ label: "", cmd: "cd my-monorepo && nx-shadcn add-app" }],
+      title:    "No package.json found at workspace root",
+      detail:   `Resolved root: ${workspaceRoot}`,
+      recovery: [{ label: "", cmd: "nx-factory init" }],
     });
-    process.exit(1); return;
+    process.exit(1);
   }
 
   await readJson<WorkspacePackageJson>(pkgJsonPath);
 
   const cfg = await loadConfig();
 
-  const packagesDir = path.join(process.cwd(), "packages");
+  const packagesDir = path.join(workspaceRoot, "packages");
   let detectedUiPkg = cfg?.uiPackage ?? "ui";
   if (!cfg && await pathExists(packagesDir)) {
     const { default: fs } = await import("fs-extra");
@@ -40,7 +62,7 @@ export async function addAppCommand(options: AddAppOptions): Promise<void> {
     if (pkgs.length > 0) detectedUiPkg = pkgs[0];
   }
 
-  const detectedPm = await detectPackageManager();
+  const detectedPm = await detectPackageManager(workspaceRoot);
 
   const defaults = {
     appName:    options.name      ?? "my-app",
@@ -93,7 +115,7 @@ export async function addAppCommand(options: AddAppOptions): Promise<void> {
   const framework = (answers.framework  ?? defaults.framework) as string;
   const uiPkgName = (answers.uiPkgName  ?? defaults.uiPkgName) as string;
   const pm        = (answers.pkgManager ?? detectedPm ?? defaults.pkgManager) as string;
-  const appsDir   = path.join(process.cwd(), "apps");
+  const appsDir   = path.join(workspaceRoot, "apps");
   const appDir    = path.join(appsDir, appName);
 
   if (await pathExists(appDir)) {
@@ -101,16 +123,16 @@ export async function addAppCommand(options: AddAppOptions): Promise<void> {
       title:    `apps/${appName} already exists`,
       recovery: [{ label: "Choose a different name or delete the existing directory:", cmd: `rm -rf apps/${appName}` }],
     });
-    process.exit(1); return;
+    process.exit(1);
   }
 
   // ─── Dry run ────────────────────────────────────────────────────────────────
   if (options.dryRun) {
     printSection(`[dry run] Scaffolding ${framework} app → apps/${appName}`);
     const step = createStepRunner(3, true);
-    await step(`Run ${frameworkCliName(framework)}`,            async () => {});
-    await step(`Add @workspace/${uiPkgName} dependency`,       async () => {});
-    await step("Patch framework config for shared UI styles",   async () => {});
+    await step(`Run ${frameworkCliName(framework)}`,           async () => {});
+    await step(`Add @workspace/${uiPkgName} dependency`,      async () => {});
+    await step("Patch framework config for shared UI styles",  async () => {});
     printSuccess({
       title:    `apps/${appName} ready (dry run — nothing written)`,
       commands: [
@@ -140,12 +162,15 @@ export async function addAppCommand(options: AddAppOptions): Promise<void> {
   printSuccess({
     title:    `apps/${appName} created`,
     commands: [
-      { cmd: `${pm} install`,                 comment: "install workspace deps" },
-      { cmd: devCmd(framework, pm, appName),  comment: framework === "expo" ? "start Expo dev server" : "start the app" },
+      { cmd: `${pm} install`,                comment: "install workspace deps"                                     },
+      { cmd: devCmd(framework, pm, appName), comment: framework === "expo" ? "start Expo dev server" : "start the app" },
     ],
-    ...(framework === "expo" ? {
-      tips: [{ label: "Note:", cmd: "Expo uses NativeWind — shadcn components are web-only" }],
-    } : {}),
+    tips: [
+      { label: "Add auth:", cmd: "nx-factory add-auth" },
+      ...(framework === "expo"
+        ? [{ label: "Note:", cmd: "Expo uses NativeWind — shadcn components are web-only" }]
+        : []),
+    ],
   });
 }
 
@@ -166,48 +191,30 @@ async function scaffoldViaCli(
         pmx(pm),
         pmxArgs(pm, "create-next-app@latest", [
           appName,
-          "--ts",
-          "--tailwind",
-          "--eslint",
-          "--app",
-          "--src-dir",
-          "--no-import-alias",
+          "--ts", "--tailwind", "--eslint", "--app", "--src-dir", "--no-import-alias",
           `--use-${pm === "bun" ? "bun" : pm === "yarn" ? "yarn" : pm === "npm" ? "npm" : "pnpm"}`,
         ]),
         { cwd: appsDir },
       );
       break;
-
     case "vite":
       await runInteractive(
         pmx(pm),
-        pmxArgs(pm, "create-vite@latest", [
-          appName,
-          "--template", "react-ts",
-        ]),
+        pmxArgs(pm, "create-vite@latest", [appName, "--template", "react-ts"]),
         { cwd: appsDir },
       );
       break;
-
     case "remix":
       await runInteractive(
         pmx(pm),
-        pmxArgs(pm, "create-remix@latest", [
-          appName,
-          "--yes",
-        ]),
+        pmxArgs(pm, "create-remix@latest", [appName, "--yes"]),
         { cwd: appsDir },
       );
       break;
-
     case "expo":
       await runInteractive(
         pmx(pm),
-        pmxArgs(pm, "create-expo-app@latest", [
-          appName,
-          "--template", "blank-typescript",
-          "--no-install",
-        ]),
+        pmxArgs(pm, "create-expo-app@latest", [appName, "--template", "blank-typescript", "--no-install"]),
         { cwd: appsDir },
       );
       break;
@@ -216,18 +223,12 @@ async function scaffoldViaCli(
 
 // ─── Add UI package dep ───────────────────────────────────────────────────────
 
-async function addUiDependency(
-  appDir:    string,
-  uiPkgName: string,
-  pm:        string,
-): Promise<void> {
+async function addUiDependency(appDir: string, uiPkgName: string, pm: string): Promise<void> {
   const pkgJsonPath = path.join(appDir, "package.json");
   const { default: fs } = await import("fs-extra");
-
   if (!(await pathExists(pkgJsonPath))) {
     throw new Error(`package.json not found in ${appDir} — did the CLI scaffold succeed?`);
   }
-
   const pkgJson = await fs.readJson(pkgJsonPath);
   pkgJson.dependencies = {
     ...pkgJson.dependencies,
@@ -245,84 +246,57 @@ async function patchConfig(
   appName:   string,
 ): Promise<void> {
   switch (framework) {
-    case "nextjs": await patchNextConfig(appDir, uiPkgName); break;
-    case "vite":   await patchViteConfig(appDir, uiPkgName); break;
+    case "nextjs": await patchNextConfig(appDir, uiPkgName);  break;
+    case "vite":   await patchViteConfig(appDir, uiPkgName);  break;
     case "remix":  await patchRemixConfig(appDir, uiPkgName); break;
-    case "expo":   await patchExpoConfig(appDir, uiPkgName); break;
+    case "expo":   await patchExpoConfig(appDir, uiPkgName);  break;
   }
 }
 
-// ── Next.js ───────────────────────────────────────────────────────────────────
 async function patchNextConfig(appDir: string, uiPkgName: string): Promise<void> {
   const { default: fs } = await import("fs-extra");
-
   for (const cfgFile of ["next.config.ts", "next.config.js", "next.config.mjs"]) {
     const cfgPath = path.join(appDir, cfgFile);
     if (!(await pathExists(cfgPath))) continue;
-
     let src = await fs.readFile(cfgPath, "utf-8");
-
     if (src.includes("transpilePackages")) {
       if (!src.includes(`@workspace/${uiPkgName}`)) {
-        src = src.replace(
-          /transpilePackages:\s*\[/,
-          `transpilePackages: ["@workspace/${uiPkgName}", `,
-        );
+        src = src.replace(/transpilePackages:\s*\[/, `transpilePackages: ["@workspace/${uiPkgName}", `);
       }
     } else {
-      src = src.replace(
-        /(const nextConfig[^=]*=\s*\{)/,
-        `$1\n  transpilePackages: ["@workspace/${uiPkgName}"],`,
-      );
+      src = src.replace(/(const nextConfig[^=]*=\s*\{)/, `$1\n  transpilePackages: ["@workspace/${uiPkgName}"],`);
     }
     await fs.writeFile(cfgPath, src, "utf-8");
     break;
   }
-
-  // Inject shared styles import into layout.tsx
   for (const layoutRel of ["src/app/layout.tsx", "app/layout.tsx", "src/app/layout.jsx"]) {
     const layoutPath = path.join(appDir, layoutRel);
     if (!(await pathExists(layoutPath))) continue;
-
     let src = await fs.readFile(layoutPath, "utf-8");
     if (!src.includes(`@workspace/${uiPkgName}`)) {
-      src = src.replace(
-        /((?:^import[^\n]+\n)+)/m,
-        `$1import "@workspace/${uiPkgName}/styles/globals.css";\n`,
-      );
+      src = src.replace(/((?:^import[^\n]+\n)+)/m, `$1import "@workspace/${uiPkgName}/styles/globals.css";\n`);
       await fs.writeFile(layoutPath, src, "utf-8");
     }
     break;
   }
-
-  // Patch globals.css — add @source so Tailwind scans the app's own files.
-  // create-next-app writes src/app/globals.css with @tailwind directives;
-  // we prepend @source before those so all app utilities are included.
   for (const cssRel of ["src/app/globals.css", "app/globals.css"]) {
     const cssPath = path.join(appDir, cssRel);
     if (!(await pathExists(cssPath))) continue;
-
     let css = await fs.readFile(cssPath, "utf-8");
-
     if (!css.includes("@source")) {
-      // Prepend @source before any existing @tailwind / @import lines
       css = `/* Ensure Tailwind scans this app's source files */\n@import "@workspace/${uiPkgName}/styles/globals.css";\n\n${css}`;
       await fs.writeFile(cssPath, css, "utf-8");
     }
     break;
   }
-
   await patchAppTsConfig(appDir);
 }
 
-// ── Vite ──────────────────────────────────────────────────────────────────────
 async function patchViteConfig(appDir: string, uiPkgName: string): Promise<void> {
   const { default: fs } = await import("fs-extra");
-
   for (const cfgFile of ["vite.config.ts", "vite.config.js"]) {
     const cfgPath = path.join(appDir, cfgFile);
     if (!(await pathExists(cfgPath))) continue;
-
     let src = await fs.readFile(cfgPath, "utf-8");
     if (!src.includes("@tailwindcss/vite") && !src.includes("tailwindcss")) {
       src = `import tailwindcss from "@tailwindcss/vite";\n${src}`;
@@ -331,20 +305,15 @@ async function patchViteConfig(appDir: string, uiPkgName: string): Promise<void>
     }
     break;
   }
-
-  // Add @tailwindcss/vite devDependency
   const pkgPath = path.join(appDir, "package.json");
   if (await pathExists(pkgPath)) {
     const pkg = await fs.readJson(pkgPath);
     pkg.devDependencies = { ...pkg.devDependencies, "@tailwindcss/vite": "^4.0.0" };
     await fs.writeJson(pkgPath, pkg, { spaces: 2 });
   }
-
-  // Inject shared styles import into main entry
   for (const mainRel of ["src/main.tsx", "src/main.jsx", "src/main.ts"]) {
     const mainPath = path.join(appDir, mainRel);
     if (!(await pathExists(mainPath))) continue;
-
     let src = await fs.readFile(mainPath, "utf-8");
     if (!src.includes(`@workspace/${uiPkgName}`)) {
       src = `import "@workspace/${uiPkgName}/styles/globals.css";\n${src}`;
@@ -352,32 +321,14 @@ async function patchViteConfig(appDir: string, uiPkgName: string): Promise<void>
     }
     break;
   }
-
-  // Write/patch the app's local index.css to add an @source for its own files.
-  // The @workspace/ui/styles already covers the UI package and workspace-wide
-  // paths, but utilities used only in this app need a local @source too.
-  for (const cssRel of ["src/index.css", "src/app.css", "index.css"]) {
-    const cssPath = path.join(appDir, cssRel);
-    if (!(await pathExists(cssPath))) continue;
-
-    let css = await fs.readFile(cssPath, "utf-8");
-    if (!css.includes("@source")) {
-      css = `/* Ensure Tailwind scans this app's source files */\n@import "@workspace/${uiPkgName}/styles/globals.css";\n\n${css}`;
-      await fs.writeFile(cssPath, css, "utf-8");
-    }
-    break;
-  }
   await patchAppTsConfig(appDir);
 }
 
-// ── Remix ─────────────────────────────────────────────────────────────────────
 async function patchRemixConfig(appDir: string, uiPkgName: string): Promise<void> {
   const { default: fs } = await import("fs-extra");
-
   for (const cfgFile of ["vite.config.ts", "vite.config.js"]) {
     const cfgPath = path.join(appDir, cfgFile);
     if (!(await pathExists(cfgPath))) continue;
-
     let src = await fs.readFile(cfgPath, "utf-8");
     if (!src.includes("@tailwindcss/vite") && !src.includes("tailwindcss")) {
       src = `import tailwindcss from "@tailwindcss/vite";\n${src}`;
@@ -386,57 +337,34 @@ async function patchRemixConfig(appDir: string, uiPkgName: string): Promise<void
     }
     break;
   }
-
   const pkgPath = path.join(appDir, "package.json");
   if (await pathExists(pkgPath)) {
     const pkg = await fs.readJson(pkgPath);
     pkg.devDependencies = { ...pkg.devDependencies, "@tailwindcss/vite": "^4.0.0" };
     await fs.writeJson(pkgPath, pkg, { spaces: 2 });
   }
-
   for (const rootRel of ["app/root.tsx", "app/root.jsx"]) {
     const rootPath = path.join(appDir, rootRel);
     if (!(await pathExists(rootPath))) continue;
-
     let src = await fs.readFile(rootPath, "utf-8");
     if (!src.includes(`@workspace/${uiPkgName}`)) {
-      src = src.replace(
-        /((?:^import[^\n]+\n)+)/m,
-        `$1import "@workspace/${uiPkgName}/styles/globals.css";\n`,
-      );
+      src = src.replace(/((?:^import[^\n]+\n)+)/m, `$1import "@workspace/${uiPkgName}/styles/globals.css";\n`);
       await fs.writeFile(rootPath, src, "utf-8");
     }
     break;
   }
-
-  // Patch or create the app's CSS entry with a local @source directive
-  for (const cssRel of ["app/globals.css", "app/tailwind.css", "app/root.css"]) {
-    const cssPath = path.join(appDir, cssRel);
-    if (!(await pathExists(cssPath))) continue;
-
-    let css = await fs.readFile(cssPath, "utf-8");
-    if (!css.includes("@source")) {
-      css = `/* Ensure Tailwind scans this app's source files */\n@import "@workspace/${uiPkgName}/styles/globals.css";\n\n${css}`;
-      await fs.writeFile(cssPath, css, "utf-8");
-    }
-    break;
-  }
-
   await patchAppTsConfig(appDir);
 }
 
-// ── Expo ──────────────────────────────────────────────────────────────────────
 async function patchExpoConfig(appDir: string, uiPkgName: string): Promise<void> {
   const { default: fs } = await import("fs-extra");
-
   const pkgPath = path.join(appDir, "package.json");
   if (await pathExists(pkgPath)) {
     const pkg = await fs.readJson(pkgPath);
-    pkg.dependencies  = { ...pkg.dependencies, nativewind: "^4.0.1", tailwindcss: "^3.4.0" };
+    pkg.dependencies    = { ...pkg.dependencies, nativewind: "^4.0.1", tailwindcss: "^3.4.0" };
     pkg.devDependencies = { ...pkg.devDependencies, "babel-preset-expo": "~12.0.0" };
     await fs.writeJson(pkgPath, pkg, { spaces: 2 });
   }
-
   await writeFile(
     path.join(appDir, "tailwind.config.js"),
     `/** @type {import('tailwindcss').Config} */
@@ -445,15 +373,9 @@ module.exports = {
   presets: [require("nativewind/preset")],
   theme: { extend: {} },
   plugins: [],
-};
-`,
+};\n`,
   );
-
-  await writeFile(
-    path.join(appDir, "global.css"),
-    `@tailwind base;\n@tailwind components;\n@tailwind utilities;\n`,
-  );
-
+  await writeFile(path.join(appDir, "global.css"), `@tailwind base;\n@tailwind components;\n@tailwind utilities;\n`);
   await writeFile(
     path.join(appDir, "babel.config.js"),
     `module.exports = function (api) {
@@ -464,10 +386,8 @@ module.exports = {
       "nativewind/babel",
     ],
   };
-};
-`,
+};\n`,
   );
-
   for (const layoutRel of ["app/_layout.tsx", "app/_layout.jsx"]) {
     const layoutPath = path.join(appDir, layoutRel);
     if (!(await pathExists(layoutPath))) continue;
@@ -478,34 +398,27 @@ module.exports = {
     }
     break;
   }
-
   await patchAppTsConfig(appDir);
 }
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function patchAppTsConfig(appDir: string): Promise<void> {
   const { default: fs } = await import("fs-extra");
   const tsConfigPath = path.join(appDir, "tsconfig.json");
   if (!(await pathExists(tsConfigPath))) return;
-
   const tsConfig = await fs.readJson(tsConfigPath);
+  const usesSrcDir = await pathExists(path.join(appDir, "src"));
   tsConfig.extends = "../../tsconfig.base.json";
-
   const currentPaths = tsConfig.compilerOptions?.paths ?? {};
   tsConfig.compilerOptions = {
     ...(tsConfig.compilerOptions ?? {}),
     paths: {
       ...currentPaths,
-      "@/*": ["./src/*"],
+      "@/*": [usesSrcDir ? "./src/*" : "./*"],
       "@workspace/*": ["../../packages/*"],
     },
   };
-
   const includeEntries: string[] = Array.isArray(tsConfig.include) ? tsConfig.include : [];
-  const requiredIncludes = ["../../packages/**/*.ts", "../../packages/**/*.tsx"];
-  tsConfig.include = Array.from(new Set([...includeEntries, ...requiredIncludes]));
-
+  tsConfig.include = Array.from(new Set([...includeEntries, "../../packages/**/*.ts", "../../packages/**/*.tsx"]));
   await fs.writeJson(tsConfigPath, tsConfig, { spaces: 2 });
 }
 
@@ -524,11 +437,6 @@ function devCmd(framework: string, pm: string, appName: string): string {
   return `${pm} dev --filter=${appName}`;
 }
 
-/**
- * Called by init.ts to scaffold the optional example Next.js app.
- * Runs create-next-app@latest inside <workspaceRoot>/apps/, then
- * wires the shared UI package in exactly the same way add-app does.
- */
 export async function scaffoldExampleApp(
   workspaceRoot: string,
   appName:       string,
@@ -537,7 +445,6 @@ export async function scaffoldExampleApp(
 ): Promise<void> {
   const appsDir = path.join(workspaceRoot, "apps");
   const appDir  = path.join(appsDir, appName);
-
   await scaffoldViaCli("nextjs", appName, appsDir, pm);
   await addUiDependency(appDir, uiPkgName, pm);
   await patchNextConfig(appDir, uiPkgName);

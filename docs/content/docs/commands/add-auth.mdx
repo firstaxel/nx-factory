@@ -1,0 +1,31 @@
+---
+title: add-auth
+description: Scaffold shared auth package with provider templates.
+---
+
+## Usage
+
+```bash
+nx-factory add-auth
+nx-factory add-auth --provider better-auth
+nx-factory add-auth --provider clerk
+nx-factory add-auth --provider workos
+nx-factory add-auth --dry-run
+```
+
+## Options
+
+| Option | Description |
+| --- | --- |
+| `-a, --app <name>` | Target app in `apps/` (CLI surface) |
+| `-p, --provider <provider>` | `clerk`, `better-auth`, `workos` |
+| `-f, --framework <framework>` | `nextjs`, `vite`, `remix`, `expo` (CLI surface) |
+| `-y, --yes` | Skip prompts and use defaults |
+| `--dry-run` | Preview changes only |
+
+## What It Does
+
+- Creates `packages/auth`
+- Generates provider templates
+- Exports `server`, `client`, `middleware`, `next`
+- Optionally wires apps with `@workspace/auth`

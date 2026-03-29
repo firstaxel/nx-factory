@@ -1,0 +1,27 @@
+---
+title: add-lib
+description: Scaffold a shared library in packages/.
+---
+
+## Usage
+
+```bash
+nx-factory add-lib
+nx-factory add-lib --name analytics --type utils
+nx-factory add-lib --name api-client --type api --yes
+nx-factory add-lib --dry-run
+```
+
+## Options
+
+| Option | Description |
+| --- | --- |
+| `-n, --name <n>` | Library name |
+| `-t, --type <type>` | `utils`, `hooks`, `config`, `types`, `api` |
+| `-y, --yes` | Skip prompts and use defaults |
+| `--dry-run` | Preview changes only |
+
+## What It Does
+
+- Creates new package under `packages/`
+- Adds TypeScript/build scaffolding for workspace usage

@@ -1,0 +1,26 @@
+---
+title: publish
+description: Build and publish the shared UI package.
+---
+
+## Usage
+
+```bash
+nx-factory publish
+nx-factory publish --tag next
+nx-factory publish --yes
+nx-factory publish --dry-run
+```
+
+## Options
+
+| Option | Description |
+| --- | --- |
+| `--tag <tag>` | npm dist-tag (default: `latest`) |
+| `-y, --yes` | Skip prompts and use defaults |
+| `--dry-run` | Preview publish steps |
+
+## What It Does
+
+- Builds shared package artifacts
+- Publishes package with selected dist-tag

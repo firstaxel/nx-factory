@@ -34,8 +34,8 @@ export async function loadConfig(): Promise<NxShadcnConfig | null> {
   }
 }
 
-/** Write config to cwd/nx-factory.config.json. */
-export async function saveConfig(cfg: NxShadcnConfig): Promise<void> {
-  const file = path.join(process.cwd(), CONFIG_FILENAME);
+/** Write config to <rootDir>/nx-factory.config.json. */
+export async function saveConfig(cfg: NxShadcnConfig, rootDir = process.cwd()): Promise<void> {
+  const file = path.join(rootDir, CONFIG_FILENAME);
   await writeJson(file, cfg);
 }

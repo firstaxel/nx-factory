@@ -1,0 +1,29 @@
+---
+title: init
+description: Initialize a new Nx monorepo with shared UI scaffolding.
+---
+
+## Usage
+
+```bash
+nx-factory init
+nx-factory init --name my-monorepo --pkg-manager pnpm
+nx-factory init --yes
+nx-factory init --dry-run
+```
+
+## Options
+
+| Option | Description |
+| --- | --- |
+| `-n, --name <n>` | Workspace name |
+| `-p, --pkg-manager <manager>` | `npm`, `pnpm`, `yarn`, `bun` |
+| `-y, --yes` | Skip prompts and use defaults |
+| `--dry-run` | Preview changes only |
+
+## What It Does
+
+- Creates Nx workspace root
+- Creates `apps/` and `packages/`
+- Scaffolds shared UI package
+- Saves `nx-factory.config.json` in workspace root

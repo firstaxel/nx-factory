@@ -1,0 +1,29 @@
+---
+title: add-app
+description: Scaffold a new app and wire it to shared UI.
+---
+
+## Usage
+
+```bash
+nx-factory add-app
+nx-factory add-app --name dashboard --framework nextjs
+nx-factory add-app --name marketing --framework vite
+nx-factory add-app --dry-run
+```
+
+## Options
+
+| Option | Description |
+| --- | --- |
+| `-n, --name <n>` | App name |
+| `-f, --framework <framework>` | `nextjs`, `vite`, `remix`, `expo` |
+| `-y, --yes` | Skip prompts and use defaults |
+| `--dry-run` | Preview changes only |
+
+## What It Does
+
+- Scaffolds app under `apps/<name>`
+- Adds `@workspace/ui` dependency
+- Patches framework config for shared UI styles
+- Updates app tsconfig paths

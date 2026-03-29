@@ -87,7 +87,7 @@ export async function addLibCommand(options: AddLibOptions): Promise<void> {
   const step = createStepRunner(3, options.dryRun);
 
   await step("Scaffold package structure", async () => {
-    await ensureDir(path.join(libDir, "src"));
+    await ensureDir(path.join(libDir, "."));
 
     await writeJson(path.join(libDir, "package.json"), {
       name:    `@workspace/${libName}`,
@@ -124,9 +124,9 @@ export async function addLibCommand(options: AddLibOptions): Promise<void> {
         esModuleInterop:  true,
         skipLibCheck:     true,
         outDir:           "dist",
-        rootDir:          "src",
+        rootDir:          ".",
       },
-      include: ["src"],
+      include: ["**/*"],
       exclude: ["node_modules", "dist"],
     });
 

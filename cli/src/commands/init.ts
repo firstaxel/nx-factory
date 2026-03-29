@@ -185,7 +185,7 @@ export async function initCommand(options: InitOptions): Promise<void> {
 				pkgManager: pm as "pnpm" | "npm" | "yarn" | "bun",
 				uiPackage:  uiPkgName,
 				version:    "1.0.0",
-			});
+			}, cwd);
 		}
 	});
 

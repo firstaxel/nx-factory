@@ -11,6 +11,7 @@ import { doctorCommand }          from "./commands/doctor.js";
 import { addLibCommand }          from "./commands/add-lib.js";
 import { addStorybookCommand }    from "./commands/add-storybook.js";
 import { publishCommand }         from "./commands/publish.js";
+import { addAuthCommand }         from "./commands/add-auth.js";
 
 const program = new Command();
 
@@ -34,7 +35,7 @@ program
   .command("add-app")
   .description("Scaffold a new app inside the monorepo that consumes the shared UI")
   .option("-n, --name <n>",              "App name")
-  .option("-f, --framework <framework>", "Framework (nextjs|vite)")
+  .option("-f, --framework <framework>", "Framework (nextjs|vite|remix|expo)")
   .option("-y, --yes",                   "Skip all prompts and use defaults")
   .option("--dry-run",                   "Preview files that would be created without writing anything")
   .action(addAppCommand);
@@ -94,5 +95,15 @@ program
   .option("-y, --yes",            "Skip all prompts and use defaults")
   .option("--dry-run",            "Preview the publish steps without actually publishing")
   .action(publishCommand);
+
+program
+  .command("add-auth")
+  .description("Add authentication to an app (Clerk | Better Auth | WorkOS)")
+  .option("-a, --app <name>",          "Target app in apps/")
+  .option("-p, --provider <provider>", "Auth provider (clerk|better-auth|workos)")
+  .option("-f, --framework <framework>","Framework (nextjs|vite|remix|expo)")
+  .option("-y, --yes",                 "Skip all prompts and use defaults")
+  .option("--dry-run",                 "Preview what would be created without writing anything")
+  .action(addAuthCommand);
 
 program.parse();

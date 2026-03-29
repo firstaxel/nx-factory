@@ -1,0 +1,31 @@
+---
+title: remove-component
+description: Remove shadcn components from shared UI package.
+---
+
+## Usage
+
+```bash
+nx-factory remove-component
+nx-factory remove-component button dialog
+nx-factory remove-component tooltip --yes
+nx-factory remove-component badge --dry-run
+```
+
+## Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[components...]` | Optional component names |
+
+## Options
+
+| Option | Description |
+| --- | --- |
+| `-y, --yes` | Skip confirmation prompts |
+| `--dry-run` | Preview changes only |
+
+## What It Does
+
+- Removes component files
+- Cleans barrel exports

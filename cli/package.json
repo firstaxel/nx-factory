@@ -6,6 +6,9 @@
 	"bin": {
 		"nx-factory": "./dist/index.js"
 	},
+	"repository": {
+		"url": "https://github.com/firstaxel/nx-factory"
+	},
 	"files": [
 		"dist",
 		"README.md"

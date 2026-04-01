@@ -1,45 +1,46 @@
 {
-  "name": "nx-factory-cli",
-  "version": "2.1.10",
-  "description": "CLI to initialize and manage an Nx monorepo with shared shadcn/ui components + Tailwind v4",
-  "type": "module",
-  "bin": {
-    "nx-factory": "./dist/index.js"
-  },
-  "files": [
-    "dist",
-    "README.md"
-  ],
-  "scripts": {
-    "build": "tsc",
-    "dev": "tsx src/index.ts",
-    "start": "node dist/index.js"
-  },
-  "engines": {
-    "node": ">=18.0.0"
-  },
-  "dependencies": {
-    "chalk": "^5.6.2",
-    "commander": "^14.0.3",
-    "execa": "^9.6.1",
-    "fs-extra": "^11.3.4",
-    "inquirer": "^13.3.2",
-    "ora": "^9.3.0"
-  },
-  "devDependencies": {
-    "@types/fs-extra": "^11.0.4",
-    "@types/inquirer": "^9.0.9",
-    "@types/node": "^25.5.0",
-    "tsx": "^4.21.0",
-    "typescript": "^6.0.2"
-  },
-  "keywords": [
-    "nx",
-    "monorepo",
-    "shadcn",
-    "tailwind",
-    "cli",
-    "scaffold"
-  ],
-  "license": "MIT"
+	"name": "nx-factory-cli",
+	"version": "2.1.10",
+	"description": "CLI to initialize and manage an Nx monorepo with shared shadcn/ui components + Tailwind v4",
+	"type": "module",
+	"bin": {
+		"nx-factory": "./dist/index.js"
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"scripts": {
+		"build": "tsc",
+		"dev": "tsx src/index.ts",
+		"start": "node dist/index.js",
+		"typecheck": "tsc --noEmit"
+	},
+	"engines": {
+		"node": ">=18.0.0"
+	},
+	"dependencies": {
+		"chalk": "^5.6.2",
+		"commander": "^14.0.3",
+		"execa": "^9.6.1",
+		"fs-extra": "^11.3.4",
+		"inquirer": "^13.3.2",
+		"ora": "^9.3.0"
+	},
+	"devDependencies": {
+		"@types/fs-extra": "^11.0.4",
+		"@types/inquirer": "^9.0.9",
+		"@types/node": "^25.5.0",
+		"tsx": "^4.21.0",
+		"typescript": "^6.0.2"
+	},
+	"keywords": [
+		"nx",
+		"monorepo",
+		"shadcn",
+		"tailwind",
+		"cli",
+		"scaffold"
+	],
+	"license": "MIT"
 }

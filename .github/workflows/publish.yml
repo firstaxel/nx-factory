@@ -134,7 +134,13 @@ jobs:
       # Validate package contents before touching npm
       - name: Validate pack
         working-directory: cli
-        run: npm pack --dry-run
+        run: |
+          npm pack --dry-run > /tmp/npm-pack.txt
+          cat /tmp/npm-pack.txt
+          grep -q "README.md" /tmp/npm-pack.txt || {
+            echo "README.md is missing from npm package contents"
+            exit 1
+          }
 
       # ── Real publish ────────────────────────────────────────────────────────
       - name: Publish to npm

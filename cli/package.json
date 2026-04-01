@@ -9,6 +9,7 @@
 	"repository": {
 		"url": "https://github.com/firstaxel/nx-factory"
 	},
+	"readme": "README.md",
 	"files": [
 		"dist",
 		"README.md"

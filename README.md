@@ -4,12 +4,12 @@
 
 <div align="center">
 
-[![npm version](https://img.shields.io/npm/v/nx-factory-cli ?color=7c3aed&labelColor=1a1a2e)](https://www.npmjs.com/package/nx-factory-cli )
-[![npm downloads](https://img.shields.io/npm/dm/nx-factory-cli ?color=7c3aed&labelColor=1a1a2e)](https://www.npmjs.com/package/nx-factory-cli )
-[![license](https://img.shields.io/npm/l/nx-factory-cli ?color=7c3aed&labelColor=1a1a2e)](./LICENSE)
+[![npm version](https://img.shields.io/npm/v/nx-factory-cli?color=7c3aed&labelColor=1a1a2e)](https://www.npmjs.com/package/nx-factory-cli)
+[![npm downloads](https://img.shields.io/npm/dm/nx-factory-cli?color=7c3aed&labelColor=1a1a2e)](https://www.npmjs.com/package/nx-factory-cli)
+[![license](https://img.shields.io/npm/l/nx-factory-cli?color=7c3aed&labelColor=1a1a2e)](./LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/firstaxel/nx-factory/publish.yml?label=CI&color=7c3aed&labelColor=1a1a2e)](https://github.com/firstaxel/nx-factory/actions)
 
-**[Documentation](https://nx-factory.vercel.app/)** · **[npm](https://www.npmjs.com/package/nx-factory-cli )** · **[Changelog](#changelog)**
+**[Documentation](https://nx-factory.vercel.app/)** · **[npm](https://www.npmjs.com/package/nx-factory-cli)** · **[Changelog](#changelog)**
 
 </div>
 

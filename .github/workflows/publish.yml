@@ -53,7 +53,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dist
-          path: dist/
+          path: cli/dist/
+          if-no-files-found: error
           retention-days: 7
 
   # ── Job 2: Publish ────────────────────────────────────────────────────────────
@@ -95,7 +96,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: dist
-          path: dist/
+          path: cli/dist/
 
       # ── Resolve version + dist-tag ──────────────────────────────────────────
       # v2.1.0        → tag: latest
@@ -106,7 +107,7 @@ jobs:
         id: meta
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            VERSION=$(node -p "require('./package.json').version")
+            VERSION=$(node -p "require('./cli/package.json').version")
             TAG="${{ github.event.inputs.tag }}"
             DRY_RUN="${{ github.event.inputs.dry_run }}"
           else
@@ -127,17 +128,17 @@ jobs:
       # Stamp the exact version from the git tag into package.json
       - name: Stamp version from tag
         if: startsWith(github.ref, 'refs/tags/v')
-        run: npm version "${{ steps.meta.outputs.version }}" --no-git-tag-version
+        run: npm --prefix cli version "${{ steps.meta.outputs.version }}" --no-git-tag-version
 
       # Validate package contents before touching npm
       - name: Validate pack
-        run: npm pack --dry-run
+        run: npm pack --dry-run --prefix cli
 
       # ── Real publish ────────────────────────────────────────────────────────
       - name: Publish to npm
         if: steps.meta.outputs.dry_run != 'true'
         run: |
-          npm publish \
+          npm publish --prefix cli \
             --access public \
             --tag "${{ steps.meta.outputs.tag }}" \
             --provenance
@@ -149,7 +150,7 @@ jobs:
         if: steps.meta.outputs.dry_run == 'true'
         run: |
           echo "DRY RUN — would publish nx-factory-cli @${{ steps.meta.outputs.version }} --tag ${{ steps.meta.outputs.tag }}"
-          npm publish --dry-run --access public
+          npm publish --prefix cli --dry-run --access public
 
       # ── Auto GitHub Release ─────────────────────────────────────────────────
       # Generates release notes from merged PRs + commits since last tag.

@@ -159,27 +159,30 @@ export async function addAuthCommand(options: AddAuthOptions): Promise<void> {
 		selectedApps: apps,
 	};
 
-	const answers: {
-		provider: AuthProvider;
-		selectedApps: string[];
-	} = options.yes
+	const answers = options.yes
 		? defaults
-		: await inquirer.prompt(
-				{
-					type: "list",
-					name: "provider",
-					message: q(
-						"Auth provider",
-						"all production-ready — pick based on your needs",
-					),
-					choices: PROVIDERS.map((p) => ({
-						name: p.name,
-						value: p.value,
-						short: p.value,
-					})),
-					default: defaults.provider,
-					when: !options.provider,
-				},
+		: await inquirer.prompt<{
+				provider?: AuthProvider;
+				selectedApps?: string[];
+			}>([
+				...(!options.provider
+					? [
+							{
+								type: "list",
+								name: "provider",
+								message: q(
+									"Auth provider",
+									"all production-ready — pick based on your needs",
+								),
+								choices: PROVIDERS.map((p) => ({
+									name: p.name,
+									value: p.value,
+									short: p.value,
+								})),
+								default: defaults.provider,
+							},
+						]
+					: []),
 				...(apps.length > 0
 					? [
 							{
@@ -194,7 +197,7 @@ export async function addAuthCommand(options: AddAuthOptions): Promise<void> {
 							},
 						]
 					: []),
-			);
+			]);
 
 	const provider = (answers.provider ?? defaults.provider) as AuthProvider;
 	const selectedApps = (answers.selectedApps ??

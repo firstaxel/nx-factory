@@ -696,10 +696,10 @@ Update the links in `src/components/donate-section.tsx`:
 
 ```ts
 // Ko-fi
-href: 'https://ko-fi.com/YOUR_USERNAME',
+href: 'https://ko-fi.com/firstaxel',
 
 // GitHub Sponsors
-href: 'https://github.com/sponsors/YOUR_USERNAME',
+href: 'https://github.com/sponsors/firstaxel',
 
 // Open Collective
 href: 'https://opencollective.com/YOUR_COLLECTIVE',
@@ -723,7 +723,7 @@ To switch deployment targets, change the `nitro({ preset: '...' })` option in `v
 Contributions are welcome. Here is how to get started:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/nx-factory-cli
+git clone https://github.com/firstaxel/nx-factory-cli
 cd nx-factory-cli
 npm install
 npm run dev -- init     # run the CLI in dev mode
@@ -817,6 +817,6 @@ MIT — see [LICENSE](./LICENSE) for details.
 
 <div align="center">
 
-Built with care. If nx-factory-cli saves you time, consider [sponsoring](https://github.com/sponsors/YOUR_USERNAME) or [buying a coffee](https://ko-fi.com/YOUR_USERNAME).
+Built with care. If nx-factory-cli saves you time, consider [sponsoring](https://github.com/sponsors/firstaxel) or [buying a coffee](https://ko-fi.com/firstaxel).
 
 </div>

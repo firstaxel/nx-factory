@@ -11,7 +11,7 @@ const DONATE_LINKS = [
 		label: "Ko-fi",
 		hint: "Buy me a coffee",
 		/**
-		 * Replace with your Ko-fi link:  https://ko-fi.com/YOUR_USERNAME
+		 * Replace with your Ko-fi link:  https://ko-fi.com/firstaxel
 		 */
 		href: "https://ko-fi.com/olasubomi",
 		icon: KofiIcon,
@@ -24,7 +24,7 @@ const DONATE_LINKS = [
 		hint: "Monthly support",
 		/**
 		 * Replace with your GitHub Sponsors link:
-		 *   https://github.com/sponsors/YOUR_USERNAME
+		 *   https://github.com/sponsors/firstaxel
 		 */
 		href: "https://github.com/sponsors/",
 		icon: HeartIcon,

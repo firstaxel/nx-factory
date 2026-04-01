@@ -4,12 +4,12 @@
 
 <div align="center">
 
-[![npm version](https://img.shields.io/npm/v/nx-factory-cli?color=7c3aed&labelColor=1a1a2e)](https://www.npmjs.com/package/nx-factory-cli)
-[![npm downloads](https://img.shields.io/npm/dm/nx-factory-cli?color=7c3aed&labelColor=1a1a2e)](https://www.npmjs.com/package/nx-factory-cli)
-[![license](https://img.shields.io/npm/l/nx-factory-cli?color=7c3aed&labelColor=1a1a2e)](./LICENSE)
-[![CI](https://img.shields.io/github/actions/workflow/status/YOUR_USERNAME/nx-factory-cli/publish.yml?label=CI&color=7c3aed&labelColor=1a1a2e)](https://github.com/YOUR_USERNAME/nx-factory-cli/actions)
+[![npm version](https://img.shields.io/npm/v/nx-factory-cli ?color=7c3aed&labelColor=1a1a2e)](https://www.npmjs.com/package/nx-factory-cli )
+[![npm downloads](https://img.shields.io/npm/dm/nx-factory-cli ?color=7c3aed&labelColor=1a1a2e)](https://www.npmjs.com/package/nx-factory-cli )
+[![license](https://img.shields.io/npm/l/nx-factory-cli ?color=7c3aed&labelColor=1a1a2e)](./LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/firstaxel/nx-factory /publish.yml?label=CI&color=7c3aed&labelColor=1a1a2e)](https://github.com/firstaxel /nx-factory /actions)
 
-**[Documentation](https://YOUR_DOCS_URL)** · **[npm](https://www.npmjs.com/package/nx-factory-cli)** · **[Changelog](#changelog)**
+**[Documentation](https://YOUR_DOCS_URL)** · **[npm](https://www.npmjs.com/package/nx-factory-cli )** · **[Changelog](#changelog)**
 
 </div>
 
@@ -17,7 +17,7 @@
 
 ## What is nx-factory?
 
-nx-factory is a CLI that bootstraps and manages a fully wired **Nx monorepo**. Instead of spending hours connecting Nx, shadcn/ui, Tailwind v4, auth, and multiple apps together, you answer a few prompts and get a workspace that is ready to build.
+nx-factory-cli is a CLI that bootstraps and manages a fully wired **Nx monorepo**. Instead of spending hours connecting Nx, shadcn/ui, Tailwind v4, auth, and multiple apps together, you answer a few prompts and get a workspace that is ready to build.
 
 ```
 my-monorepo/
@@ -66,7 +66,7 @@ Every app in `apps/` imports from `@workspace/ui` and `@workspace/auth`. You add
 npm install -g nx-factory-cli
 
 # Or run without installing
-npx nx-factory init
+npx nx-factory-cli init
 ```
 
 **Requirements:** Node.js ≥ 18
@@ -77,16 +77,16 @@ npx nx-factory init
 
 ```bash
 # 1. Bootstrap a new monorepo
-npx nx-factory init
+npx nx-factory-cli init
 
 # 2. Add your first app
-nx-factory add-app
+nx-factory-cli add-app
 
 # 3. Add authentication
-nx-factory add-auth
+nx-factory-cli add-auth
 
 # 4. Add shadcn/ui components
-nx-factory add-component button card dialog input
+nx-factory-cli add-component button card dialog input
 ```
 
 That is it. Your workspace is running with shared UI and auth wired across every app.
@@ -104,15 +104,15 @@ Every command supports two universal flags:
 
 ---
 
-### `nx-factory init`
+### `nx-factory-cli init`
 
 Bootstrap a brand-new Nx monorepo from scratch.
 
 ```bash
-nx-factory init
-nx-factory init --name my-design-system --pkg-manager pnpm
-nx-factory init --yes   # all defaults, no prompts
-nx-factory init --dry-run
+nx-factory-cli init
+nx-factory-cli init --name my-design-system --pkg-manager pnpm
+nx-factory-cli init --yes   # all defaults, no prompts
+nx-factory-cli init --dry-run
 ```
 
 **Interactive prompts:**
@@ -153,15 +153,15 @@ my-monorepo/
 
 ---
 
-### `nx-factory add-app`
+### `nx-factory-cli add-app`
 
 Scaffold a new app inside `apps/` that is pre-wired to import from `@workspace/ui`.
 
 ```bash
-nx-factory add-app
-nx-factory add-app --name dashboard --framework nextjs
-nx-factory add-app --name mobile --framework expo
-nx-factory add-app --dry-run
+nx-factory-cli add-app
+nx-factory-cli add-app --name dashboard --framework nextjs
+nx-factory-cli add-app --name mobile --framework expo
+nx-factory-cli add-app --dry-run
 ```
 
 **Supported frameworks:**
@@ -185,16 +185,16 @@ nx-factory add-app --dry-run
 
 ---
 
-### `nx-factory add-auth`
+### `nx-factory-cli add-auth`
 
 Create `packages/auth` — a monorepo-native auth package that every app imports from. You choose one provider and all apps get the same consistent API.
 
 ```bash
-nx-factory add-auth
-nx-factory add-auth --provider clerk
-nx-factory add-auth --provider better-auth
-nx-factory add-auth --provider workos
-nx-factory add-auth --dry-run
+nx-factory-cli add-auth
+nx-factory-cli add-auth --provider clerk
+nx-factory-cli add-auth --provider better-auth
+nx-factory-cli add-auth --provider workos
+nx-factory-cli add-auth --dry-run
 ```
 
 **Supported providers:**
@@ -239,20 +239,20 @@ The command also asks which apps to wire — it adds `"@workspace/auth": "worksp
 
 ---
 
-### `nx-factory add-component`
+### `nx-factory-cli add-component`
 
 Add one or more shadcn/ui components to `packages/ui` and automatically update the barrel export in `src/index.ts`.
 
 ```bash
 # Interactive component picker
-nx-factory add-component
+nx-factory-cli add-component
 
 # Pass component names directly
-nx-factory add-component button card dialog
-nx-factory add-component data-table calendar combobox
+nx-factory-cli add-component button card dialog
+nx-factory-cli add-component data-table calendar combobox
 
 # Preview without writing
-nx-factory add-component button --dry-run
+nx-factory-cli add-component button --dry-run
 ```
 
 After running, import anywhere in the monorepo:
@@ -263,48 +263,48 @@ import { Button, Card, Dialog } from '@workspace/ui';
 
 ---
 
-### `nx-factory remove-component`
+### `nx-factory-cli remove-component`
 
 Remove one or more shadcn/ui components from `packages/ui` and clean up their barrel exports.
 
 ```bash
-nx-factory remove-component
-nx-factory remove-component tooltip badge
-nx-factory remove-component button --yes    # skip confirmation
-nx-factory remove-component tooltip --dry-run
+nx-factory-cli remove-component
+nx-factory-cli remove-component tooltip badge
+nx-factory-cli remove-component button --yes    # skip confirmation
+nx-factory-cli remove-component tooltip --dry-run
 ```
 
 ---
 
-### `nx-factory update`
+### `nx-factory-cli update`
 
 Update installed shadcn/ui components to their latest versions.
 
 ```bash
 # Update all installed components
-nx-factory update
+nx-factory-cli update
 
 # Update specific components only
-nx-factory update button card
+nx-factory-cli update button card
 
 # Skip confirmation prompts
-nx-factory update --yes
+nx-factory-cli update --yes
 
 # Preview what would change
-nx-factory update --dry-run
+nx-factory-cli update --dry-run
 ```
 
 ---
 
-### `nx-factory add-lib`
+### `nx-factory-cli add-lib`
 
 Scaffold a generic shared library in `packages/` — for code that is not UI components but still needs to be shared across apps.
 
 ```bash
-nx-factory add-lib
-nx-factory add-lib --name utils --type utils
-nx-factory add-lib --name hooks --type hooks
-nx-factory add-lib --name config --type config
+nx-factory-cli add-lib
+nx-factory-cli add-lib --name utils --type utils
+nx-factory-cli add-lib --name hooks --type hooks
+nx-factory-cli add-lib --name config --type config
 ```
 
 **Library types:**
@@ -321,28 +321,28 @@ Each library is created at `packages/<name>/` with `package.json`, `tsconfig.jso
 
 ---
 
-### `nx-factory add-storybook`
+### `nx-factory-cli add-storybook`
 
 Add Storybook to the shared UI package with auto-generated stories for every installed component.
 
 ```bash
-nx-factory add-storybook
-nx-factory add-storybook --dry-run
+nx-factory-cli add-storybook
+nx-factory-cli add-storybook --dry-run
 ```
 
 Storybook is configured to point at `packages/ui` and comes with component stories pre-generated for every shadcn/ui component you have installed.
 
 ---
 
-### `nx-factory publish`
+### `nx-factory-cli publish`
 
 Build and publish `packages/ui` to npm with interactive version bumping and a changelog entry.
 
 ```bash
-nx-factory publish
-nx-factory publish --tag next     # publish as pre-release
-nx-factory publish --yes          # skip prompts, patch bump
-nx-factory publish --dry-run      # preview without uploading
+nx-factory-cli publish
+nx-factory-cli publish --tag next     # publish as pre-release
+nx-factory-cli publish --yes          # skip prompts, patch bump
+nx-factory-cli publish --dry-run      # preview without uploading
 ```
 
 **Steps performed:**
@@ -358,24 +358,24 @@ nx-factory publish --dry-run      # preview without uploading
 
 ---
 
-### `nx-factory list`
+### `nx-factory-cli list`
 
 List every installed shadcn/ui component and show which apps are importing each one.
 
 ```bash
-nx-factory list
+nx-factory-cli list
 ```
 
 Output shows component names, their source file locations, and a usage summary across every app in `apps/`.
 
 ---
 
-### `nx-factory doctor`
+### `nx-factory-cli doctor`
 
 Validate workspace health and automatically fix common issues.
 
 ```bash
-nx-factory doctor
+nx-factory-cli doctor
 ```
 
 **Checks performed:**
@@ -445,7 +445,7 @@ This separation means no server code ever leaks into client bundles and vice ver
 ### Clerk setup
 
 ```bash
-nx-factory add-auth --provider clerk
+nx-factory-cli add-auth --provider clerk
 ```
 
 After scaffolding, copy `.env.example` to your app's `.env.local` and fill in your keys from [dashboard.clerk.com](https://dashboard.clerk.com).
@@ -470,7 +470,7 @@ const user = await currentUser();
 ### Better Auth setup
 
 ```bash
-nx-factory add-auth --provider better-auth
+nx-factory-cli add-auth --provider better-auth
 ```
 
 1. Open `packages/auth/src/server.ts` and uncomment the database adapter for your stack (PostgreSQL, SQLite, Prisma, Drizzle).
@@ -489,7 +489,7 @@ export const { GET, POST } = toNextJsHandler(auth.handler);
 ### WorkOS setup
 
 ```bash
-nx-factory add-auth --provider workos
+nx-factory-cli add-auth --provider workos
 ```
 
 1. Copy `.env.example` → `.env.local` and fill in `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, and `WORKOS_COOKIE_PASSWORD`.
@@ -514,7 +514,7 @@ export default withAuth(async function Page({ user }) {
 
 ## Tailwind v4
 
-nx-factory uses Tailwind v4's CSS-first configuration. There is no `tailwind.config.js` — everything lives in `packages/ui/src/styles/globals.css`.
+nx-factory-cli uses Tailwind v4's CSS-first configuration. There is no `tailwind.config.js` — everything lives in `packages/ui/src/styles/globals.css`.
 
 ```css
 /* packages/ui/src/styles/globals.css */
@@ -572,7 +572,7 @@ Pre-release suffix detection is automatic: `-beta`, `-next`, `-canary`, and `-al
 
 **1. Generate an npm token:**
 - [npmjs.com](https://www.npmjs.com) → Account → Access Tokens → Generate New Token
-- Type: **Granular** → Publish scope for `nx-factory-cli`
+- Type: **Granular** → Publish scope for `nx-factory-cli `
 
 **2. Add it as a GitHub secret:**
 - Repo → Settings → Secrets and variables → Actions → New secret
@@ -655,7 +655,7 @@ icon: Terminal
 ## Usage
 
 ```bash
-nx-factory my-command --flag value
+nx-factory-cli my-command --flag value
 ```
 ```
 
@@ -817,6 +817,6 @@ MIT — see [LICENSE](./LICENSE) for details.
 
 <div align="center">
 
-Built with care. If nx-factory saves you time, consider [sponsoring](https://github.com/sponsors/YOUR_USERNAME) or [buying a coffee](https://ko-fi.com/YOUR_USERNAME).
+Built with care. If nx-factory-cli saves you time, consider [sponsoring](https://github.com/sponsors/YOUR_USERNAME) or [buying a coffee](https://ko-fi.com/YOUR_USERNAME).
 
 </div>

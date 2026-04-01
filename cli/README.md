@@ -24,7 +24,7 @@ A TypeScript CLI that spins up a production-ready **Nx monorepo** with a shared 
 npm install -g nx-factory-cli
 
 # Or run directly
-npx nx-factory init
+npx nx-factory-cli init
 ```
 
 ### Local development
@@ -40,14 +40,14 @@ pnpm dev init             # runs the CLI in dev mode
 
 ## Commands
 
-### `nx-factory init`
+### `nx-factory-cli init`
 
 Interactively initializes a new Nx monorepo.
 
 ```bash
-nx-factory init
+nx-factory-cli init
 # or with flags:
-nx-factory init --name my-design-system --pkg-manager pnpm
+nx-factory-cli init --name my-design-system --pkg-manager pnpm
 ```
 
 **Prompts you for:**
@@ -84,15 +84,15 @@ my-monorepo/
 
 ---
 
-### `nx-factory add-app`
+### `nx-factory-cli add-app`
 
 Scaffolds a new app inside `apps/` that's pre-wired to import from your shared UI package.
 
 ```bash
-nx-factory add-app
+nx-factory-cli add-app
 # or with flags:
-nx-factory add-app --name dashboard --framework nextjs
-nx-factory add-app --name marketing --framework vite
+nx-factory-cli add-app --name dashboard --framework nextjs
+nx-factory-cli add-app --name marketing --framework vite
 ```
 
 **Supported frameworks:**
@@ -106,17 +106,17 @@ The new app will automatically have:
 
 ---
 
-### `nx-factory add-component`
+### `nx-factory-cli add-component`
 
 Adds one or more shadcn components to the shared UI package and **automatically updates the barrel export** in `src/index.ts`.
 
 ```bash
 # Interactive picker
-nx-factory add-component
+nx-factory-cli add-component
 
 # Or pass component names directly
-nx-factory add-component button card dialog
-nx-factory add-component data-table
+nx-factory-cli add-component button card dialog
+nx-factory-cli add-component data-table
 ```
 
 After running, import in any app:

@@ -61,7 +61,7 @@ export class MonorepoRootNotFoundError extends Error {
   constructor(cwd: string) {
     super(
       `Could not find a monorepo root from: ${cwd}\n` +
-      `Make sure you are inside an nx-factory workspace, or run 'nx-factory init' first.`,
+      `Make sure you are inside an nx-factory-cli workspace, or run 'nx-factory-cli init' first.`,
     );
     this.name = "MonorepoRootNotFoundError";
   }

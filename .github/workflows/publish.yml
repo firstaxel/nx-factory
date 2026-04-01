@@ -150,7 +150,7 @@ jobs:
       - name: Publish dry run
         if: steps.meta.outputs.dry_run == 'true'
         run: |
-          echo "DRY RUN — would publish nx-factory-cli@${{ steps.meta.outputs.version }} --tag ${{ steps.meta.outputs.tag }}"
+          echo "DRY RUN — would publish nx-factory-cli @${{ steps.meta.outputs.version }} --tag ${{ steps.meta.outputs.tag }}"
           npm publish --dry-run --access public
 
       # ── Auto GitHub Release ─────────────────────────────────────────────────

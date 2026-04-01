@@ -46,42 +46,42 @@ const FEATURES = [
 
 const COMMANDS = [
   {
-    cmd: 'nx-factory init',
+    cmd: 'nx-factory-cli init',
     desc: 'Bootstrap a new Nx monorepo with shared UI, Tailwind v4 and shadcn/ui.',
     label: 'init',
   },
   {
-    cmd: 'nx-factory add-app',
+    cmd: 'nx-factory-cli add-app',
     desc: 'Scaffold a Next.js, Vite, Remix or Expo app pre-wired to @workspace/ui.',
     label: 'add-app',
   },
   {
-    cmd: 'nx-factory add-auth',
+    cmd: 'nx-factory-cli add-auth',
     desc: 'Create packages/auth with Clerk, Better Auth, or WorkOS — monorepo-native.',
     label: 'add-auth',
   },
   {
-    cmd: 'nx-factory add-component',
+    cmd: 'nx-factory-cli add-component',
     desc: 'Add shadcn/ui components to the shared package and auto-update barrel exports.',
     label: 'add-component',
   },
   {
-    cmd: 'nx-factory add-lib',
+    cmd: 'nx-factory-cli add-lib',
     desc: 'Scaffold a typed shared library (utils, hooks, config, types, api).',
     label: 'add-lib',
   },
   {
-    cmd: 'nx-factory doctor',
+    cmd: 'nx-factory-cli doctor',
     desc: 'Validate workspace health and auto-fix barrel export issues.',
     label: 'doctor',
   },
 ] as const;
 
 const STEPS = [
-  { n: '1', title: 'Install', code: 'npm i -g nx-factory-cli' },
-  { n: '2', title: 'Init',    code: 'nx-factory init' },
-  { n: '3', title: 'Add app', code: 'nx-factory add-app' },
-  { n: '4', title: 'Add auth',code: 'nx-factory add-auth' },
+  { n: '1', title: 'Install', code: 'npm i -g nx-factory-cli ' },
+  { n: '2', title: 'Init',    code: 'nx-factory-cli init' },
+  { n: '3', title: 'Add app', code: 'nx-factory-cli add-app' },
+  { n: '4', title: 'Add auth',code: 'nx-factory-cli add-auth' },
 ] as const;
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -121,8 +121,8 @@ function Home() {
             {/* Install command */}
             <div className="flex items-center gap-2 rounded-xl border bg-fd-card px-4 py-2.5 font-mono text-sm shadow-sm w-full max-w-sm justify-center">
               <span className="text-fd-muted-foreground select-none">$</span>
-              <span className="text-fd-foreground select-all">npx nx-factory init</span>
-              <CopyButton text="npx nx-factory init" />
+              <span className="text-fd-foreground select-all">npx nx-factory-cli init</span>
+              <CopyButton text="npx nx-factory-cli init" />
             </div>
 
             <div className="flex items-center gap-3 flex-wrap justify-center">
@@ -135,7 +135,7 @@ function Home() {
                 <ArrowRightIcon className="h-4 w-4" />
               </Link>
               <a
-                href="https://github.com/YOUR_USERNAME/nx-factory-cli"
+                href="https://github.com/YOUR_USERNAME/nx-factory-cli "
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 rounded-lg border bg-fd-card px-5 py-2.5 text-sm font-medium hover:bg-fd-accent transition-colors"
@@ -234,9 +234,9 @@ function Home() {
         {/* ── Footer ───────────────────────────────────────────────────────── */}
         <footer className="border-t px-4 py-8 text-center text-xs text-fd-muted-foreground">
           <p>
-            nx-factory is open-source and MIT licensed.{' '}
+            nx-factory-cli is open-source and MIT licensed.{' '}
             <a
-              href="https://github.com/YOUR_USERNAME/nx-factory-cli"
+              href="https://github.com/YOUR_USERNAME/nx-factory-cli "
               target="_blank"
               rel="noopener noreferrer"
               className="underline hover:text-fd-foreground transition-colors"

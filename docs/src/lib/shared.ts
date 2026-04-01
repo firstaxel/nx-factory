@@ -8,7 +8,7 @@ export const docsContentRoute = '/llms.mdx/docs';
  * Used for the "Edit on GitHub" links in the docs layout.
  */
 export const gitConfig = {
-  user:   'YOUR_GITHUB_USERNAME',   // e.g. 'acme-corp'
-  repo:   'nx-factory-cli',
+  user:   'firstaxel',   // e.g. 'acme-corp'
+  repo:   'nx-factory',
   branch: 'main',
 };

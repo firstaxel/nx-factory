@@ -61,7 +61,7 @@ export function DonateSection({ className }: DonateSectionProps) {
         <div>
           <h3 className="font-semibold text-sm">Support this project</h3>
           <p className="mt-0.5 text-xs text-fd-muted-foreground">
-            nx-factory is free and open-source. If it saves you time, consider
+            nx-factory-cli is free and open-source. If it saves you time, consider
             supporting its development.
           </p>
         </div>

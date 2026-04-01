@@ -135,7 +135,7 @@ jobs:
       - name: Validate pack
         working-directory: cli
         run: |
-          npm pack --dry-run > /tmp/npm-pack.txt
+          npm pack --dry-run > /tmp/npm-pack.txt 2>&1
           cat /tmp/npm-pack.txt
           grep -q "README.md" /tmp/npm-pack.txt || {
             echo "README.md is missing from npm package contents"

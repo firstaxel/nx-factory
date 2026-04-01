@@ -128,17 +128,20 @@ jobs:
       # Stamp the exact version from the git tag into package.json
       - name: Stamp version from tag
         if: startsWith(github.ref, 'refs/tags/v')
-        run: npm --prefix cli version "${{ steps.meta.outputs.version }}" --no-git-tag-version
+        working-directory: cli
+        run: npm version "${{ steps.meta.outputs.version }}" --no-git-tag-version
 
       # Validate package contents before touching npm
       - name: Validate pack
-        run: npm pack --dry-run --prefix cli
+        working-directory: cli
+        run: npm pack --dry-run
 
       # ── Real publish ────────────────────────────────────────────────────────
       - name: Publish to npm
         if: steps.meta.outputs.dry_run != 'true'
+        working-directory: cli
         run: |
-          npm publish --prefix cli \
+          npm publish \
             --access public \
             --tag "${{ steps.meta.outputs.tag }}" \
             --provenance
@@ -148,9 +151,10 @@ jobs:
       # ── Dry run branch ──────────────────────────────────────────────────────
       - name: Publish dry run
         if: steps.meta.outputs.dry_run == 'true'
+        working-directory: cli
         run: |
           echo "DRY RUN — would publish nx-factory-cli @${{ steps.meta.outputs.version }} --tag ${{ steps.meta.outputs.tag }}"
-          npm publish --prefix cli --dry-run --access public
+          npm publish --dry-run --access public
 
       # ── Auto GitHub Release ─────────────────────────────────────────────────
       # Generates release notes from merged PRs + commits since last tag.

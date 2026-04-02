@@ -26,9 +26,18 @@ import {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface AddAuthOptions {
+	app?: string;
 	provider?: string;
+	framework?: string;
 	yes?: boolean;
 	dryRun?: boolean;
+}
+
+type AppFramework = "nextjs" | "vite" | "remix" | "expo";
+
+interface AppTarget {
+	name: string;
+	framework: AppFramework;
 }
 
 // ─── Provider menu ────────────────────────────────────────────────────────────
@@ -81,15 +90,148 @@ async function listApps(root: string): Promise<string[]> {
 	return entries.filter((e) => e.isDirectory()).map((e) => e.name);
 }
 
+function normalizeFramework(framework?: string): AppFramework | null {
+	switch (framework) {
+		case "nextjs":
+		case "vite":
+		case "remix":
+		case "expo":
+			return framework;
+		default:
+			return null;
+	}
+}
+
+async function detectAppFramework(
+	appDir: string,
+	fallback: AppFramework | null,
+): Promise<AppFramework> {
+	const { default: fs } = await import("fs-extra");
+	const pkgPath = path.join(appDir, "package.json");
+	if (await pathExists(pkgPath)) {
+		try {
+			const pkg = await fs.readJson(pkgPath);
+			const dependencies = {
+				...pkg.dependencies,
+				...pkg.devDependencies,
+				...pkg.peerDependencies,
+			};
+			if (
+				dependencies.next ||
+				dependencies["next"] ||
+				dependencies["next-auth"]
+			) {
+				return "nextjs";
+			}
+			if (
+				dependencies.expo ||
+				dependencies["expo-router"] ||
+				dependencies["react-native"]
+			) {
+				return "expo";
+			}
+			if (
+				dependencies["@remix-run/react"] ||
+				dependencies["@remix-run/node"] ||
+				dependencies["@remix-run/dev"]
+			) {
+				return "remix";
+			}
+			if (
+				dependencies.vite ||
+				dependencies["@vitejs/plugin-react"] ||
+				dependencies["vite"]
+			) {
+				return "vite";
+			}
+		} catch {
+			// ignore and fall back below
+		}
+	}
+
+	for (const candidate of [
+		"next.config.ts",
+		"next.config.js",
+		"next.config.mjs",
+	]) {
+		if (await pathExists(path.join(appDir, candidate))) return "nextjs";
+	}
+	for (const candidate of ["app/root.tsx", "app/root.jsx", "app/routes.tsx"]) {
+		if (await pathExists(path.join(appDir, candidate))) return "remix";
+	}
+	for (const candidate of ["vite.config.ts", "vite.config.js"]) {
+		if (await pathExists(path.join(appDir, candidate))) return "vite";
+	}
+	for (const candidate of ["app.json", "app.config.ts", "app.config.js"]) {
+		if (await pathExists(path.join(appDir, candidate))) return "expo";
+	}
+
+	return fallback ?? "nextjs";
+}
+
+async function listAppTargets(
+	root: string,
+	fallbackFramework: AppFramework | null,
+): Promise<AppTarget[]> {
+	const appNames = await listApps(root);
+	const targets: AppTarget[] = [];
+	for (const name of appNames) {
+		const appDir = path.join(root, "apps", name);
+		const framework = await detectAppFramework(appDir, fallbackFramework);
+		targets.push({ name, framework });
+	}
+	return targets;
+}
+
+function formatAppChoice(app: AppTarget): string {
+	return `${app.name}  — ${app.framework}`;
+}
+
+function getSetupTips(
+	authPackageName: string,
+	provider: AuthProvider,
+	appTargets: AppTarget[],
+): Array<{ label: string; cmd: string }> {
+	const nextApps = appTargets.filter((app) => app.framework === "nextjs");
+	const nonNextApps = appTargets.filter((app) => app.framework !== "nextjs");
+	const tips: Array<{ label: string; cmd: string }> = [];
+
+	if (nextApps.length > 0) {
+		tips.push({
+			label: "Next apps →",
+			cmd: `${nextApps.map((app) => app.name).join(", ")}: import { ... } from "${authPackageName}/next" and add app middleware`,
+		});
+	}
+
+	if (nonNextApps.length > 0) {
+		tips.push({
+			label: `${nonNextApps
+				.map((app) => `${app.framework} app ${app.name}`)
+				.join(", ")} →`,
+			cmd: `use ${authPackageName}/client in the app shell and set the public auth URL env vars`,
+		});
+	}
+
+	if (provider === "better-auth") {
+		tips.push({
+			label: "Better Auth →",
+			cmd: `add a Next.js route handler only for Next apps, then run the Better Auth migration`,
+		});
+	}
+
+	return tips;
+}
+
 async function wireApps(
 	root: string,
-	apps: string[],
+	apps: AppTarget[],
 	pm: string,
 	scope: string,
 ): Promise<void> {
 	const { default: fs } = await import("fs-extra");
 	const protocol = pm === "npm" ? "*" : "workspace:*";
-	for (const appName of apps) {
+	for (const app of apps) {
+		const appName = app.name;
 		const pkgPath = path.join(root, "apps", appName, "package.json");
 		if (!(await pathExists(pkgPath))) continue;
 		const pkg = await fs.readJson(pkgPath);
@@ -151,12 +293,31 @@ export async function addAuthCommand(options: AddAuthOptions): Promise<void> {
 	const scope = resolveScope(cfg);
 	const detectedPm = await detectPackageManager(root);
 	const pm = detectedPm ?? cfg?.pkgManager ?? "pnpm";
-	const apps = await listApps(root);
+	const frameworkHint = normalizeFramework(options.framework);
+	const apps = await listAppTargets(root, frameworkHint);
+	const authPackageName = scopedPackageName(scope, "auth");
+	const selectedAppNames = options.app
+		? [options.app]
+		: apps.map((app) => app.name);
+	const selectedAppTargets = selectedAppNames
+		.map((appName) => apps.find((app) => app.name === appName))
+		.filter((app): app is AppTarget => Boolean(app));
+	if (options.app && selectedAppTargets.length === 0) {
+		printError({
+			title: `apps/${options.app} not found`,
+			detail: "Pick an app from the apps/ directory or create it first.",
+			recovery: [
+				{ label: "List apps:", cmd: "ls apps" },
+				{ label: "Create one first:", cmd: "nx-factory-cli add-app" },
+			],
+		});
+		process.exit(1);
+	}
 
 	// ── Prompts ──────────────────────────────────────────────────────────────────
 	const defaults = {
 		provider: (options.provider ?? "clerk") as AuthProvider,
-		selectedApps: apps,
+		selectedApps: selectedAppNames,
 	};
 
 	const answers = options.yes
@@ -183,17 +344,20 @@ export async function addAuthCommand(options: AddAuthOptions): Promise<void> {
 							},
 						]
 					: []),
-				...(apps.length > 0
+				...(!options.app && apps.length > 0
 					? [
 							{
 								type: "checkbox",
 								name: "selectedApps",
 								message: q(
-									`Wire ${scopedPackageName(scope, "auth")} into which apps?`,
+									`Wire ${authPackageName} into which apps?`,
 									"adds dep to package.json — run install after",
 								),
-								choices: apps,
-								default: apps,
+								choices: apps.map((app) => ({
+									name: formatAppChoice(app),
+									value: app.name,
+								})),
+								default: apps.map((app) => app.name),
 							},
 						]
 					: []),
@@ -202,6 +366,9 @@ export async function addAuthCommand(options: AddAuthOptions): Promise<void> {
 	const provider = (answers.provider ?? defaults.provider) as AuthProvider;
 	const selectedApps = (answers.selectedApps ??
 		defaults.selectedApps) as string[];
+	const selectedTargets = selectedApps
+		.map((appName) => apps.find((app) => app.name === appName))
+		.filter((app): app is AppTarget => Boolean(app));
 	const scaffolder = getScaffolder(provider);
 
 	// ── Dry run ────────────────────────────────────────────────────────────────
@@ -212,8 +379,10 @@ export async function addAuthCommand(options: AddAuthOptions): Promise<void> {
 		await step(`Scaffold ${scaffolder.label} ./files`, async () => {});
 		await step("Install provider npm packages", async () => {});
 		await step(
-			selectedApps.length > 0
-				? `Wire into: ${selectedApps.join(", ")}`
+			selectedTargets.length > 0
+				? `Wire into: ${selectedTargets
+						.map((app) => `${app.name} (${app.framework})`)
+						.join(", ")}`
 				: "No apps to wire",
 			async () => {},
 		);
@@ -259,12 +428,14 @@ export async function addAuthCommand(options: AddAuthOptions): Promise<void> {
 	});
 
 	await step(
-		selectedApps.length > 0
-			? `Add ${scopedPackageName(scope, "auth")} to: ${selectedApps.join(", ")}`
+		selectedTargets.length > 0
+			? `Add ${authPackageName} to: ${selectedTargets
+					.map((app) => `${app.name} (${app.framework})`)
+					.join(", ")}`
 			: "Skip app wiring (no apps found)",
 		async () => {
-			if (selectedApps.length > 0)
-				await wireApps(root, selectedApps, pm, scope);
+			if (selectedTargets.length > 0)
+				await wireApps(root, selectedTargets, pm, scope);
 		},
 	);
 
@@ -292,26 +463,10 @@ export async function addAuthCommand(options: AddAuthOptions): Promise<void> {
 		commands: nextSteps,
 		tips: [
 			{ label: "Docs →", cmd: providerDocs(provider) },
-			{
-				label: "Next apps →",
-				cmd: `import { ... } from "${scopedPackageName(scope, "auth")}/next"`,
-			},
-			...(provider === "better-auth"
-				? [
-						{
-							label: "Vite/Expo apps →",
-							cmd: `use ${scopedPackageName(scope, "auth")}/client and set VITE_APP_URL/NEXT_PUBLIC_APP_URL to your auth host`,
-						},
-					]
-				: [
-						{
-							label: "Non-Next apps →",
-							cmd: `use ${scopedPackageName(scope, "auth")}/client (+ provider app setup), ${scopedPackageName(scope, "auth")}/next is Next-only`,
-						},
-					]),
+			...getSetupTips(authPackageName, provider, selectedTargets),
 			{
 				label: "Server import →",
-				cmd: `import { ... } from "${scopedPackageName(scope, "auth")}/server"`,
+				cmd: `import { ... } from "${authPackageName}/server"`,
 			},
 		],
 	});

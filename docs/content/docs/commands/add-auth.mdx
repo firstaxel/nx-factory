@@ -10,6 +10,8 @@ nx-factory-cli add-auth
 nx-factory-cli add-auth --provider better-auth
 nx-factory-cli add-auth --provider clerk
 nx-factory-cli add-auth --provider workos
+nx-factory-cli add-auth --app dashboard
+nx-factory-cli add-auth --app dashboard --framework nextjs
 nx-factory-cli add-auth --dry-run
 ```
 
@@ -19,7 +21,7 @@ nx-factory-cli add-auth --dry-run
 | --- | --- |
 | `-a, --app <name>` | Target app in `apps/` (CLI surface) |
 | `-p, --provider <provider>` | `clerk`, `better-auth`, `workos` |
-| `-f, --framework <framework>` | `nextjs`, `vite`, `remix`, `expo` (CLI surface) |
+| `-f, --framework <framework>` | `nextjs`, `vite`, `remix`, `expo` (fallback when app detection is unclear) |
 | `-y, --yes` | Skip prompts and use defaults |
 | `--dry-run` | Preview changes only |
 
@@ -28,4 +30,5 @@ nx-factory-cli add-auth --dry-run
 - Creates `packages/auth`
 - Generates provider templates
 - Exports `server`, `client`, `middleware`, `next`
-- Optionally wires apps with `@workspace/auth`
+- Optionally wires selected apps with `@<scope>/auth`
+- Detects each app's framework so Next.js apps get Next-specific setup and non-Next apps get client-only guidance

@@ -5,7 +5,7 @@ import { loadConfig, resolveScope, scopedPackageName } from "../config.js";
 import { run, pmx, pmxArgs, detectPackageManager } from "../exec.js";
 import { q, c, printSuccess, printError } from "../ui.js";
 
-const ALL_SHADCN_COMPONENTS = [
+const FALLBACK_SHADCN_COMPONENTS = [
 	"accordion",
 	"alert",
 	"alert-dialog",
@@ -55,6 +55,11 @@ const ALL_SHADCN_COMPONENTS = [
 	"tooltip",
 ];
 
+interface ShadcnRegistryEntry {
+	name: string;
+	type?: string;
+}
+
 export async function addComponentCommand(components: string[]): Promise<void> {
 	const cfg = await loadConfig();
 	const scope = resolveScope(cfg);
@@ -81,14 +86,16 @@ export async function addComponentCommand(components: string[]): Promise<void> {
 	let selectedComponents = components;
 
 	if (selectedComponents.length === 0) {
+		const availableComponents = await getAvailableShadcnComponents();
 		const answers = await inquirer.prompt({
 			type: "checkbox",
 			name: "components",
 			message: q(
 				"Which shadcn components do you want to add?",
-				"space to toggle · enter to confirm",
+				"space to toggle · enter to confirm · arrows to scroll",
 			),
-			choices: ALL_SHADCN_COMPONENTS,
+			choices: availableComponents,
+			pageSize: 20,
 			validate: (v: readonly unknown[]) =>
 				v.length > 0 || c.red("Select at least one component"),
 		});
@@ -205,4 +212,36 @@ function toComponentName(kebab: string): string {
 		.split("-")
 		.map((p) => p.charAt(0).toUpperCase() + p.slice(1))
 		.join("");
+}
+
+async function getAvailableShadcnComponents(): Promise<string[]> {
+	try {
+		const response = await fetch("https://ui.shadcn.com/r/index.json");
+		if (!response.ok) {
+			throw new Error(`Failed to load registry index: ${response.status}`);
+		}
+
+		const data = (await response.json()) as unknown;
+		if (!Array.isArray(data)) {
+			throw new Error("Unexpected registry response format");
+		}
+
+		const components = data
+			.filter((entry): entry is ShadcnRegistryEntry => {
+				if (!entry || typeof entry !== "object") return false;
+				const maybe = entry as Partial<ShadcnRegistryEntry>;
+				return typeof maybe.name === "string";
+			})
+			.filter((entry) => entry.type === "registry:ui")
+			.map((entry) => entry.name)
+			.sort((a, b) => a.localeCompare(b));
+
+		if (components.length > 0) {
+			return Array.from(new Set(components));
+		}
+	} catch {
+		// Fall through to stable local fallback when offline or registry is unavailable.
+	}
+
+	return FALLBACK_SHADCN_COMPONENTS;
 }

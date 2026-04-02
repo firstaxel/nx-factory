@@ -109,7 +109,7 @@ export async function addAppCommand(options: AddAppOptions): Promise<void> {
 						c.red("Only lowercase letters, numbers, and dashes"),
 				},
 				{
-					type: "checkbox",
+					type: "list",
 					name: "framework",
 					message: q("Framework"),
 					choices: [
@@ -128,7 +128,7 @@ export async function addAppCommand(options: AddAppOptions): Promise<void> {
 					default: defaults.uiPkgName,
 				},
 				{
-					type: "checkbox",
+					type: "list",
 					name: "pkgManager",
 					message: q("Package manager"),
 					choices: ["pnpm", "npm", "yarn", "bun"],

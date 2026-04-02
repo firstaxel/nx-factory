@@ -7,7 +7,6 @@ import { scaffoldExampleApp } from "./add-app.js";
 import {
 	c,
 	q,
-	detected,
 	createStepRunner,
 	printSection,
 	printSuccess,
@@ -22,16 +21,32 @@ interface InitOptions {
 }
 
 const TOTAL_STEPS = 8;
+const SUPPORTED_PACKAGE_MANAGERS = ["pnpm", "npm", "yarn", "bun"] as const;
+
+function isSupportedPackageManager(
+	pm: string | undefined,
+): pm is (typeof SUPPORTED_PACKAGE_MANAGERS)[number] {
+	return (
+		!!pm &&
+		SUPPORTED_PACKAGE_MANAGERS.includes(
+			pm as (typeof SUPPORTED_PACKAGE_MANAGERS)[number],
+		)
+	);
+}
 
 export async function initCommand(options: InitOptions): Promise<void> {
 	if (options.dryRun) {
 		printSection("Dry run — no files will be written");
 	}
 
+	const providedPkgManager = isSupportedPackageManager(options.pkgManager)
+		? options.pkgManager
+		: undefined;
+
 	// ─── Prompts ──────────────────────────────────────────────────────────────
 	const defaults = {
 		workspaceName: options.name ?? "my-monorepo",
-		pkgManager: options.pkgManager ?? "pnpm",
+		pkgManager: providedPkgManager ?? "pnpm",
 		uiPackageName: "ui",
 		initialComponents: [] as string[],
 		addExampleApp: true,
@@ -54,14 +69,11 @@ export async function initCommand(options: InitOptions): Promise<void> {
 						c.red("Only lowercase letters, numbers, and dashes allowed"),
 				},
 				{
-					type: "list",
+					type: "checkbox",
 					name: "pkgManager",
 					message: q("Package manager"),
-					default: options.pkgManager
-						? detected(options.pkgManager)
-						: defaults.pkgManager,
-					choices: ["pnpm", "npm", "yarn", "bun"],
-					when: !options.pkgManager,
+					default: providedPkgManager ?? defaults.pkgManager,
+					choices: SUPPORTED_PACKAGE_MANAGERS,
 				},
 				{
 					type: "input",
@@ -73,7 +85,7 @@ export async function initCommand(options: InitOptions): Promise<void> {
 						c.red("Only lowercase letters, numbers, and dashes"),
 				},
 				{
-					type: "list",
+					type: "checkbox",
 					name: "baseColor",
 					message: q(
 						"Base color theme",
@@ -116,7 +128,7 @@ export async function initCommand(options: InitOptions): Promise<void> {
 				},
 			]);
 
-	const pm = (answers.pkgManager ?? options.pkgManager ?? "pnpm") as string;
+	const pm = (answers.pkgManager ?? providedPkgManager ?? "pnpm") as string;
 	const workspaceName = answers.workspaceName as string;
 	const scope = normalizeScope(workspaceName);
 	const uiPkgName = answers.uiPackageName as string;
@@ -130,6 +142,8 @@ export async function initCommand(options: InitOptions): Promise<void> {
 		(initialComponents.length > 0 ? 1 : 0) +
 		(addExampleApp ? 1 : 0);
 	const step = createStepRunner(totalSteps, options.dryRun);
+
+	console.log(`  ${c.dim("Selected package manager:")} ${c.whiteBold(pm)}`);
 
 	printSection(
 		`${options.dryRun ? "[dry run] " : ""}Creating workspace at ./${workspaceName}`,

@@ -1,65 +1,68 @@
 import path from "path";
 import { writeFile, ensureDir } from "../../../files.js";
+import { scopedPackageName } from "../../../config.js";
 import type { AuthPackageScaffolder, AuthPackageOptions } from "../types.js";
 
 export const betterAuthScaffolder: AuthPackageScaffolder = {
-  label: "Better Auth",
+	label: "Better Auth",
 
-  dependencies: {
-    "better-auth": "latest",
-  },
+	dependencies: {
+		"better-auth": "latest",
+	},
 
-  devDependencies: {
-    "@types/react": "^19.0.0",
-  },
+	devDependencies: {
+		"@types/react": "^19.0.0",
+	},
 
-  peerDependencies: {
-    react:       "^18 || ^19",
-    "react-dom": "^18 || ^19",
-  },
+	peerDependencies: {
+		react: "^18 || ^19",
+		"react-dom": "^18 || ^19",
+	},
 
-  async scaffold(pkgDir: string, _opts: AuthPackageOptions): Promise<void> {
-    await ensureDir(path.join(pkgDir, "."));
+	async scaffold(pkgDir: string, opts: AuthPackageOptions): Promise<void> {
+		const authPackageName = scopedPackageName(opts.scope, "auth");
+		const dbPackageName = scopedPackageName(opts.scope, "db");
 
-    // ── index.ts ──────────────────────────────────────────────────────────
-    await writeFile(
-      path.join(pkgDir, "index.ts"),
-      `/**
- * @workspace/auth — Better Auth v1.2+
+		await ensureDir(path.join(pkgDir, "."));
+
+		// ── index.ts ──────────────────────────────────────────────────────────
+		await writeFile(
+			path.join(pkgDir, "index.ts"),
+			`/**
+ * ${authPackageName} — Better Auth v1.2+
  *
  * Prefer sub-path imports for tree-shaking:
- *   import { auth }           from "@workspace/auth/server"
- *   import { authClient }     from "@workspace/auth/client"
- *   import { authMiddleware } from "@workspace/auth/next"
+ *   import { auth }           from "${authPackageName}/server"
+ *   import { authClient }     from "${authPackageName}/client"
+ *   import { authMiddleware } from "${authPackageName}/next"
  */
 export * from "./server.js";
 export * from "./client.js";
 `,
-    );
+		);
 
-    // ── server.ts ─────────────────────────────────────────────────────────
-    // better-auth v1.2: betterAuth() config, database adapters, plugins
-    await writeFile(
-      path.join(pkgDir, "server.ts"),
-      `/**
+		// ── server.ts ─────────────────────────────────────────────────────────
+		await writeFile(
+			path.join(pkgDir, "server.ts"),
+			`/**
  * Better Auth @latest — server instance.
  *
  * This file is the single source of truth for your auth configuration.
- * Import \`auth\` in API routes, server components, and middleware.
+     * Import \`auth\` in API routes, server components, and middleware.
  *
  * @example Next.js App Router (Server Component)
- *   import { auth } from "@workspace/auth/server";
+ *   import { auth } from "${authPackageName}/server";
  *   import { headers } from "next/headers";
  *
  *   const session = await auth.api.getSession({ headers: await headers() });
  *
  * @example Next.js Route Handler
- *   import { auth } from "@workspace/auth/server";
+ *   import { auth } from "${authPackageName}/server";
  *   import { toNextJsHandler } from "better-auth/next-js";
  *   export const { GET, POST } = toNextJsHandler(auth);
  *
  * @example Remix loader
- *   import { auth } from "@workspace/auth/server";
+ *   import { auth } from "${authPackageName}/server";
  *   const session = await auth.api.getSession({ headers: request.headers });
  */
 import { betterAuth } from "better-auth";
@@ -86,15 +89,15 @@ export const auth = betterAuth({
    *
    *   Prisma:
    *     import { prismaAdapter } from "better-auth/adapters/prisma";
-   *     import { prisma } from "@workspace/db";
+   *     import { prisma } from "${dbPackageName}";
    *     database: prismaAdapter(prisma, { provider: "postgresql" }),
    *
    *   Drizzle:
    *     import { drizzleAdapter } from "better-auth/adapters/drizzle";
-   *     import { db } from "@workspace/db";
+   *     import { db } from "${dbPackageName}";
    *     database: drizzleAdapter(db, { provider: "pg" }),
    */
-  database: undefined as never,  // Replace with your adapter
+  database: undefined as never, // Replace with your adapter
 
   emailAndPassword: {
     enabled: true,
@@ -104,8 +107,8 @@ export const auth = betterAuth({
 
   session: {
     cookieCache: {
-      enabled:    true,
-      maxAge:     60 * 5,   // 5 minutes
+      enabled: true,
+      maxAge: 60 * 5, // 5 minutes
     },
   },
 
@@ -133,22 +136,21 @@ export const auth = betterAuth({
 /** Inferred Session type from your auth config */
 export type Session = typeof auth.$Infer.Session;
 /** Inferred User type from your auth config */
-export type User    = typeof auth.$Infer.Session.user;
+export type User = typeof auth.$Infer.Session.user;
 `,
-    );
+		);
 
-    // ── client.ts ─────────────────────────────────────────────────────────
-    // better-auth v1.2: createAuthClient from "better-auth/react"
-    await writeFile(
-      path.join(pkgDir, "client.ts"),
-      `/**
+		// ── client.ts ─────────────────────────────────────────────────────────
+		await writeFile(
+			path.join(pkgDir, "client.ts"),
+			`/**
  * Better Auth v1.2+ — browser client.
  *
  * Works in React Client Components, Vite SPAs, and Expo.
  * Call methods directly on authClient to avoid type inference issues.
  *
  * @example
- *   import { authClient } from "@workspace/auth/client";
+ *   import { authClient } from "${authPackageName}/client";
  *
  *   // React hook
  *   const { data: session, isPending } = authClient.useSession();
@@ -183,19 +185,18 @@ export const authClient: AuthClient = createAuthClient({
     "http://localhost:3000",
 });
 `,
-    );
+		);
 
-    // ── middleware.ts ─────────────────────────────────────────────────────
-    // better-auth v1.2: auth.api.getSession pattern (no separate middleware pkg)
-    await writeFile(
-      path.join(pkgDir, "middleware.ts"),
-      `/**
+		// ── middleware.ts ─────────────────────────────────────────────────────
+		await writeFile(
+			path.join(pkgDir, "middleware.ts"),
+			`/**
  * Better Auth v1.2+ — Next.js middleware.
  *
  * Quick start — copy into apps/<your-app>/middleware.ts:
  *
  *   import type { NextRequest } from "next/server";
- *   import { authMiddleware, middlewareConfig } from "@workspace/auth/middleware";
+ *   import { authMiddleware, middlewareConfig } from "${authPackageName}/middleware";
  *
  *   export default function middleware(request: NextRequest) {
  *     return authMiddleware(request);
@@ -205,9 +206,9 @@ export const authClient: AuthClient = createAuthClient({
  *
  * Custom public paths:
  *
- *   import { buildMiddleware } from "@workspace/auth/middleware";
+ *   import { buildMiddleware } from "${authPackageName}/middleware";
  *   export default buildMiddleware({ publicPaths: ["/", "/about(.*)"] });
- *   export { middlewareConfig as config } from "@workspace/auth/middleware";
+ *   export { middlewareConfig as config } from "${authPackageName}/middleware";
  */
 import { auth } from "./server.js";
 
@@ -221,8 +222,8 @@ const DEFAULT_PUBLIC_PATHS = [
   "/",
   "/sign-in",
   "/sign-up",
-  "/api/auth",          // Better Auth's own handler
-  "/api/webhooks",      // Webhook endpoints
+  "/api/auth", // Better Auth's own handler
+  "/api/webhooks", // Webhook endpoints
 ];
 
 export const middlewareConfig = {
@@ -239,14 +240,14 @@ export const authMiddleware = buildMiddleware();
  * Build a middleware with configurable public paths.
  *
  * @param publicPaths - Paths that do NOT require authentication (prefix match)
- * @param redirectTo  - Where to redirect unauthenticated users (default: /sign-in)
+ * @param redirectTo - Where to redirect unauthenticated users (default: /sign-in)
  */
 export function buildMiddleware({
   publicPaths = DEFAULT_PUBLIC_PATHS,
-  redirectTo  = "/sign-in",
+  redirectTo = "/sign-in",
 }: {
   publicPaths?: string[];
-  redirectTo?:  string;
+  redirectTo?: string;
 } = {}) {
   return async function middleware(request: MiddlewareRequest): Promise<any> {
     const { pathname } = request.nextUrl;
@@ -267,12 +268,12 @@ export function buildMiddleware({
   };
 }
 `,
-    );
+		);
 
-    // ── next-route-handler.ts — template for the catch-all API route ─────
-    await writeFile(
-      path.join(pkgDir, "next-route-handler.ts"),
-      `/**
+		// ── next-route-handler.ts — template for the catch-all API route ─────
+		await writeFile(
+			path.join(pkgDir, "next-route-handler.ts"),
+			`/**
  * Template: apps/<your-app>/app/api/auth/[...all]/route.ts
  *
  * Copy this pattern into your app's API route directory.
@@ -280,23 +281,23 @@ export function buildMiddleware({
  *
  * better-auth latest: pass auth instance to toNextJsHandler.
  */
-import { auth } from "@workspace/auth/server";
+import { auth } from "${authPackageName}/server";
 import { toNextJsHandler } from "better-auth/next-js";
 
 // This creates GET and POST handlers that Next.js will pick up automatically.
 export const { GET, POST } = toNextJsHandler(auth);
 `,
-    );
+		);
 
-    // ── next.ts — Next.js-specific adapter exports ───────────────────────
-    await writeFile(
-      path.join(pkgDir, "next.ts"),
-      `/**
- * Next.js adapter for @workspace/auth.
+		// ── next.ts — Next.js-specific adapter exports ───────────────────────
+		await writeFile(
+			path.join(pkgDir, "next.ts"),
+			`/**
+ * Next.js adapter for ${authPackageName}.
  *
  * Import this sub-path only in Next apps:
  *   import { authMiddleware, middlewareConfig, nextRouteHandlers }
- *     from "@workspace/auth/next";
+ *     from "${authPackageName}/next";
  */
 import { toNextJsHandler } from "better-auth/next-js";
 import { auth } from "./server.js";
@@ -310,12 +311,12 @@ export {
 /** Helper for Next app/api/auth/[...all]/route.ts */
 export const nextRouteHandlers = toNextJsHandler(auth);
 `,
-    );
+		);
 
-    // ── .env.example ─────────────────────────────────────────────────────────
-    await writeFile(
-      path.join(pkgDir, ".env.example"),
-      `# ─── Better Auth v1.2+ ────────────────────────────────────────────────────────
+		// ── .env.example ─────────────────────────────────────────────────────────
+		await writeFile(
+			path.join(pkgDir, ".env.example"),
+			`# ─── Better Auth v1.2+ ────────────────────────────────────────────────────────
 # Secret used to sign session tokens — generate with: openssl rand -base64 32
 BETTER_AUTH_SECRET=REPLACE_WITH_RANDOM_32_CHAR_SECRET
 
@@ -333,12 +334,12 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 # GOOGLE_CLIENT_ID=
 # GOOGLE_CLIENT_SECRET=
 `,
-    );
+		);
 
-    // ── README.md ─────────────────────────────────────────────────────────────
-    await writeFile(
-      path.join(pkgDir, "README.md"),
-      `# @workspace/auth — Better Auth v1.2+
+		// ── README.md ─────────────────────────────────────────────────────────────
+		await writeFile(
+			path.join(pkgDir, "README.md"),
+			`# ${authPackageName} — Better Auth v1.2+
 
 Shared authentication powered by [Better Auth](https://www.better-auth.com) — open-source, self-hosted, database-agnostic.
 
@@ -355,13 +356,13 @@ cp packages/auth/.env.example apps/<your-app>/.env.local
 
 ### 3. Add the dependency
 \`\`\`json
-{ "dependencies": { "@workspace/auth": "workspace:*" } }
+{ "dependencies": { "${authPackageName}": "workspace:*" } }
 \`\`\`
 
 ### 4. Add the API route (Next.js)
 \`\`\`ts
 // apps/<your-app>/app/api/auth/[...all]/route.ts
-import { nextRouteHandlers } from "@workspace/auth/next";
+import { nextRouteHandlers } from "${authPackageName}/next";
 export const { GET, POST } = nextRouteHandlers;
 \`\`\`
 
@@ -369,7 +370,7 @@ export const { GET, POST } = nextRouteHandlers;
 \`\`\`ts
 // apps/<your-app>/middleware.ts
 import type { NextRequest } from "next/server";
-import { authMiddleware, middlewareConfig } from "@workspace/auth/next";
+import { authMiddleware, middlewareConfig } from "${authPackageName}/next";
 
 export default function middleware(request: NextRequest) {
   return authMiddleware(request);
@@ -388,13 +389,13 @@ npx better-auth migrate
 
 \`\`\`tsx
 // Server component
-import { auth }    from "@workspace/auth/server";
+import { auth } from "${authPackageName}/server";
 import { headers } from "next/headers";
 const session = await auth.api.getSession({ headers: await headers() });
 
 // Client component
 "use client";
-import { authClient } from "@workspace/auth/client";
+import { authClient } from "${authPackageName}/client";
 const { data: session, isPending } = authClient.useSession();
 await authClient.signIn.email({ email, password });
 await authClient.signIn.social({ provider: "github" });
@@ -406,11 +407,11 @@ await authClient.signOut();
 
 | Sub-path | Key exports |
 |---|---|
-| \`@workspace/auth/server\` | \`auth\`, \`Session\` type, \`User\` type |
-| \`@workspace/auth/client\` | \`authClient\`, \`AuthClient\` type |
-| \`@workspace/auth/middleware\` | \`authMiddleware\`, \`buildMiddleware()\`, \`middlewareConfig\` |
-| \`@workspace/auth/next\` | \`nextRouteHandlers\`, \`authMiddleware\`, \`middlewareConfig\` |
+| \`${authPackageName}/server\` | \`auth\`, \`Session\` type, \`User\` type |
+| \`${authPackageName}/client\` | \`authClient\`, \`AuthClient\` type |
+| \`${authPackageName}/middleware\` | \`authMiddleware\`, \`buildMiddleware()\`, \`middlewareConfig\` |
+| \`${authPackageName}/next\` | \`nextRouteHandlers\`, \`authMiddleware\`, \`middlewareConfig\` |
 `,
-    );
-  },
+		);
+	},
 };

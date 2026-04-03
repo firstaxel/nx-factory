@@ -51,15 +51,14 @@ export async function updateCommand(
 		const { selected } = await inquirer.prompt({
 			type: "checkbox",
 			name: "selected",
-			message: q(
-				"Which components do you want to update?",
-				"defaults to all · space to deselect",
-			),
+			message: `${c.purple("?")} ${c.white("Which components do you want to update?")}`,
 			choices: installed.map((comp) => ({
 				name: comp,
 				value: comp,
 				checked: true,
 			})),
+			loop: true,
+			pageSize: 15,
 			validate: (v: readonly unknown[]) =>
 				v.length > 0 || "Select at least one component",
 		});

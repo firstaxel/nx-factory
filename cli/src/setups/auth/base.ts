@@ -28,7 +28,7 @@ export async function writeAuthPackageBase(
 				import: "./dist/index.js",
 				types: "./dist/index.d.ts",
 			},
-			// Named sub-paths so apps can do:  import { ... } from "@workspace/auth/server"
+			// Named sub-paths so apps can do:  import { ... } from "${authPackageName}/server"
 			"./server": {
 				import: "./dist/server.js",
 				types: "./dist/server.d.ts",

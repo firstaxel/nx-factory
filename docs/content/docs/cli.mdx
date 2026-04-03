@@ -121,16 +121,16 @@ nx-factory-cli add-auth --dry-run
 
 - Generates `packages/auth` with provider-specific files
 - Builds exports for:
-	- `@workspace/auth/server`
-	- `@workspace/auth/client`
-	- `@workspace/auth/middleware`
-	- `@workspace/auth/next`
-- Optionally wires selected app package.json files with `@workspace/auth`
+-	- `@<scope>/auth/server`
+-	- `@<scope>/auth/client`
+-	- `@<scope>/auth/middleware`
+-	- `@<scope>/auth/next`
+- Optionally wires selected app package.json files with `@<scope>/auth`
 
 ### Framework Usage
 
-- Next apps: import middleware/route helpers from `@workspace/auth/next`
-- Vite/Expo apps: primarily use `@workspace/auth/client` and point to an auth host
+- Next apps: import middleware/route helpers from `@<scope>/auth/next`
+- Vite/Expo apps: primarily use `@<scope>/auth/client` and point to an auth host
 - Remix apps: use `server` + `client` exports and add framework route wiring
 
 ## add-component
@@ -399,15 +399,15 @@ nx-factory-cli add-auth --provider workos
 
 ### Generated exports
 
-- `@workspace/auth/server`
-- `@workspace/auth/client`
-- `@workspace/auth/middleware`
-- `@workspace/auth/next` (Next.js adapter)
+- `@<scope>/auth/server`
+- `@<scope>/auth/client`
+- `@<scope>/auth/middleware`
+- `@<scope>/auth/next` (Next.js adapter)
 
 ### Framework guidance
 
-- Next apps: import middleware/route helpers from `@workspace/auth/next`.
-- Vite/Expo apps: use `@workspace/auth/client` and point to an auth host URL.
+- Next apps: import middleware/route helpers from `@<scope>/auth/next`.
+- Vite/Expo apps: use `@<scope>/auth/client` and point to an auth host URL.
 - Remix: use server/client exports and provider-specific route wiring.
 
 ## `nx-factory-cli add-component`

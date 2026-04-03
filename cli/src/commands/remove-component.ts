@@ -37,11 +37,10 @@ export async function removeComponentCommand(
 		const { selected } = await inquirer.prompt({
 			type: "checkbox",
 			name: "selected",
-			message: q(
-				"Which components do you want to remove?",
-				"space to toggle · enter to confirm",
-			),
+			message: `${c.purple("?")} ${c.white("Which components do you want to remove?")}`,
 			choices: installed,
+			loop: true,
+			pageSize: 15,
 			validate: (v: readonly unknown[]) =>
 				v.length > 0 || c.red("Select at least one"),
 		});

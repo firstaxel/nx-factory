@@ -89,7 +89,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
 		? defaults
 		: await inquirer.prompt([
 				{
-					type: "list",
+					type: "select",
 					name: "bumpType",
 					message: q("Version bump", `current: ${currentVersion}`),
 					choices: [

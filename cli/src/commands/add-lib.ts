@@ -6,7 +6,6 @@ import { detectPackageManager } from "../exec.js";
 import {
 	c,
 	q,
-	detected,
 	createStepRunner,
 	printSection,
 	printSuccess,
@@ -60,7 +59,7 @@ export async function addLibCommand(options: AddLibOptions): Promise<void> {
 						c.red("Only lowercase letters, numbers, and dashes"),
 				},
 				{
-					type: "list",
+					type: "select",
 					name: "libType",
 					message: q("Library type", "determines the initial file structure"),
 					choices: [
@@ -73,11 +72,11 @@ export async function addLibCommand(options: AddLibOptions): Promise<void> {
 					default: defaults.libType,
 				},
 				{
-					type: "list",
+					type: "select",
 					name: "pm",
 					message: q("Package manager"),
 					choices: ["pnpm", "npm", "yarn", "bun"],
-					default: detectedPm ? detected(detectedPm) : defaults.pm,
+					default: defaults.pm,
 					when: !detectedPm,
 				},
 			]);

@@ -1,67 +1,68 @@
 import path from "path";
 import { writeFile, ensureDir } from "../../../files.js";
+import { scopedPackageName } from "../../../config.js";
 import type { AuthPackageScaffolder, AuthPackageOptions } from "../types.js";
 
 export const clerkScaffolder: AuthPackageScaffolder = {
-  label: "Clerk",
+	label: "Clerk",
 
-  // Clerk v6 — all packages unified under @clerk/nextjs / @clerk/react etc.
-  dependencies: {
-    "@clerk/nextjs":      "latest",
-    "@clerk/clerk-react": "latest",
-    "@clerk/remix":       "latest",
-    "@clerk/clerk-expo":  "latest",
-  },
+	dependencies: {
+		"@clerk/nextjs": "latest",
+		"@clerk/clerk-react": "latest",
+		"@clerk/remix": "latest",
+		"@clerk/clerk-expo": "latest",
+	},
 
-  devDependencies: {
-    "@types/react": "^19.0.0",
-  },
+	devDependencies: {
+		"@types/react": "^19.0.0",
+	},
 
-  peerDependencies: {
-    react:       "^18 || ^19",
-    "react-dom": "^18 || ^19",
-  },
+	peerDependencies: {
+		react: "^18 || ^19",
+		"react-dom": "^18 || ^19",
+	},
 
-  async scaffold(pkgDir: string, _opts: AuthPackageOptions): Promise<void> {
-    await ensureDir(path.join(pkgDir, "."));
+	async scaffold(pkgDir: string, opts: AuthPackageOptions): Promise<void> {
+		const authPackageName = scopedPackageName(opts.scope, "auth");
 
-    // ── /index.ts ──────────────────────────────────────────────────────────
-    await writeFile(
-      path.join(pkgDir, "index.ts"),
-      `/**
- * @workspace/auth — Clerk latest setup.
+		await ensureDir(path.join(pkgDir, "."));
+
+		// ── /index.ts ──────────────────────────────────────────────────────────
+		await writeFile(
+			path.join(pkgDir, "index.ts"),
+			`/**
+ * ${authPackageName} — Clerk latest setup.
  *
  * Prefer sub-path imports for tree-shaking:
- *   import { auth, currentUser }  from "@workspace/auth/server"
- *   import { useAuth, UserButton } from "@workspace/auth/client"
- *   import { authMiddleware }      from "@workspace/auth/next"
+ *   import { auth, currentUser }  from "${authPackageName}/server"
+ *   import { useAuth, UserButton } from "${authPackageName}/client"
+ *   import { authMiddleware }      from "${authPackageName}/next"
  */
 export * from "./server.js";
 export * from "./client.js";
 `,
-    );
+		);
 
-    await writeFile(
-      path.join(pkgDir, "next.ts"),
-      `/** Next.js adapter for @workspace/auth (Clerk). */
+		await writeFile(
+			path.join(pkgDir, "next.ts"),
+			`/** Next.js adapter for ${authPackageName} (Clerk). */
 export {
   authMiddleware,
   buildMiddleware,
   middlewareConfig,
 } from "./middleware.js";
 `,
-    );
+		);
 
-    // ── /server.ts ─────────────────────────────────────────────────────────
-    // Clerk v6: auth() is async, currentUser() is async, clerkClient is a factory
-    await writeFile(
-      path.join(pkgDir, "server.ts"),
-      `/**
+		// ── /server.ts ─────────────────────────────────────────────────────────
+		await writeFile(
+			path.join(pkgDir, "server.ts"),
+			`/**
  * Clerk v6 — server-side helpers.
  * Import in Next.js Server Components, Route Handlers, or Middleware.
  *
  * @example Next.js App Router
- *   import { auth, currentUser } from "@workspace/auth/server";
+ *   import { auth, currentUser } from "${authPackageName}/server";
  *
  *   export default async function Page() {
  *     const { userId } = await auth();
@@ -69,7 +70,7 @@ export {
  *   }
  *
  * @example Route Handler / Remix loader
- *   import { getAuth } from "@workspace/auth/server";
+ *   import { getAuth } from "${authPackageName}/server";
  *   const { userId } = getAuth(req);   // Express / Remix: sync helper
  */
 
@@ -92,17 +93,17 @@ export type {
   Session,
 } from "@clerk/nextjs/server";
 `,
-    );
+		);
 
-    // ── /client.ts ─────────────────────────────────────────────────────────
-    await writeFile(
-      path.join(pkgDir, "client.ts"),
-      `/**
+		// ── /client.ts ─────────────────────────────────────────────────────────
+		await writeFile(
+			path.join(pkgDir, "client.ts"),
+			`/**
  * Clerk v6 — client-side hooks and pre-built components.
  * Use in React Client Components, Vite SPAs, or Expo apps.
  *
  * @example
- *   import { useAuth, useUser, UserButton } from "@workspace/auth/client";
+ *   import { useAuth, useUser, UserButton } from "${authPackageName}/client";
  *
  *   function Header() {
  *     const { isSignedIn } = useAuth();
@@ -141,13 +142,12 @@ export {
 // Render helpers
 export { SignedIn, SignedOut, Protect } from "@clerk/nextjs";
 `,
-    );
+		);
 
-    // ── /middleware.ts ─────────────────────────────────────────────────────
-    // Clerk v6: clerkMiddleware replaces authMiddleware (deprecated in v5, removed in v6)
-    await writeFile(
-      path.join(pkgDir, "middleware.ts"),
-      `/**
+		// ── /middleware.ts ─────────────────────────────────────────────────────
+		await writeFile(
+			path.join(pkgDir, "middleware.ts"),
+			`/**
  * Clerk v6 middleware for Next.js.
  *
  * Clerk v6 uses clerkMiddleware() — authMiddleware() was removed.
@@ -155,7 +155,7 @@ export { SignedIn, SignedOut, Protect } from "@clerk/nextjs";
  * Quick start — copy into apps/<your-app>/middleware.ts:
  *
  *   import type { NextRequest } from "next/server";
- *   import { authMiddleware, middlewareConfig } from "@workspace/auth/middleware";
+ *   import { authMiddleware, middlewareConfig } from "${authPackageName}/middleware";
  *
  *   export default function middleware(request: NextRequest) {
  *     return authMiddleware(request);
@@ -165,9 +165,9 @@ export { SignedIn, SignedOut, Protect } from "@clerk/nextjs";
  *
  * Custom public routes:
  *
- *   import { buildMiddleware } from "@workspace/auth/middleware";
+ *   import { buildMiddleware } from "${authPackageName}/middleware";
  *   export default buildMiddleware(["/", "/about(.*)", "/marketing(.*)"]);
- *   export { middlewareConfig as config } from "@workspace/auth/middleware";
+ *   export { middlewareConfig as config } from "${authPackageName}/middleware";
  */
 import {
   clerkMiddleware,
@@ -179,7 +179,6 @@ export const middlewareConfig = {
   matcher: [
     // Skip Next.js internals and all static files
     "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    // Always run for API routes
     "/(api|trpc)(.*)",
   ],
 };
@@ -218,12 +217,12 @@ export function buildMiddleware(
   }, options);
 }
 `,
-    );
+		);
 
-    // ── .env.example ─────────────────────────────────────────────────────────
-    await writeFile(
-      path.join(pkgDir, ".env.example"),
-      `# ─── Clerk v6 ────────────────────────────────────────────────────────────────
+		// ── .env.example ─────────────────────────────────────────────────────────
+		await writeFile(
+			path.join(pkgDir, ".env.example"),
+			`# ─── Clerk v6 ────────────────────────────────────────────────────────────────
 # Get these from: https://dashboard.clerk.com → your app → API Keys
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_REPLACE_ME
 CLERK_SECRET_KEY=sk_test_REPLACE_ME
@@ -234,12 +233,12 @@ NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
 NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/dashboard
 NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/dashboard
 `,
-    );
+		);
 
-    // ── README.md ─────────────────────────────────────────────────────────────
-    await writeFile(
-      path.join(pkgDir, "README.md"),
-      `# @workspace/auth — Clerk v6
+		// ── README.md ─────────────────────────────────────────────────────────────
+		await writeFile(
+			path.join(pkgDir, "README.md"),
+			`# ${authPackageName} — Clerk v6
 
 Shared authentication package powered by [Clerk](https://clerk.com) v6.
 
@@ -255,13 +254,13 @@ cp packages/auth/.env.example apps/<your-app>/.env.local
 
 ### 2. Add the dependency
 \`\`\`json
-{ "dependencies": { "@workspace/auth": "workspace:*" } }
+{ "dependencies": { "${authPackageName}": "workspace:*" } }
 \`\`\`
 
 ### 3. Wrap your root layout
 \`\`\`tsx
 // apps/<your-app>/app/layout.tsx
-import { ClerkProvider } from "@workspace/auth/client";
+import { ClerkProvider } from "${authPackageName}/client";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -276,7 +275,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 \`\`\`ts
 // apps/<your-app>/middleware.ts
 import type { NextRequest } from "next/server";
-import { authMiddleware, middlewareConfig } from "@workspace/auth/next";
+import { authMiddleware, middlewareConfig } from "${authPackageName}/next";
 
 export default function middleware(request: NextRequest) {
   return authMiddleware(request);
@@ -288,13 +287,13 @@ export const config = middlewareConfig;
 ### 5. Use in your pages
 \`\`\`tsx
 // Server component
-import { auth, currentUser } from "@workspace/auth/server";
+import { auth, currentUser } from "${authPackageName}/server";
 const { userId } = await auth();
 const user = await currentUser();
 
 // Client component
 "use client";
-import { useAuth, UserButton, SignedIn, SignedOut } from "@workspace/auth/client";
+import { useAuth, UserButton, SignedIn, SignedOut } from "${authPackageName}/client";
 const { isSignedIn } = useAuth();
 \`\`\`
 
@@ -302,11 +301,11 @@ const { isSignedIn } = useAuth();
 
 | Sub-path | Key exports |
 |---|---|
-| \`@workspace/auth/server\` | \`auth()\`, \`currentUser()\`, \`clerkClient()\`, \`getAuth()\` |
-| \`@workspace/auth/client\` | \`useAuth\`, \`useUser\`, \`ClerkProvider\`, \`UserButton\`, \`SignedIn\`, \`SignedOut\` |
-| \`@workspace/auth/middleware\` | \`authMiddleware\`, \`buildMiddleware()\`, \`middlewareConfig\` |
-| \`@workspace/auth/next\` | \`authMiddleware\`, \`buildMiddleware()\`, \`middlewareConfig\` |
+| \`${authPackageName}/server\` | \`auth()\`, \`currentUser()\`, \`clerkClient()\`, \`getAuth()\` |
+| \`${authPackageName}/client\` | \`useAuth\`, \`useUser\`, \`ClerkProvider\`, \`UserButton\`, \`SignedIn\`, \`SignedOut\` |
+| \`${authPackageName}/middleware\` | \`authMiddleware\`, \`buildMiddleware()\`, \`middlewareConfig\` |
+| \`${authPackageName}/next\` | \`authMiddleware\`, \`buildMiddleware()\`, \`middlewareConfig\` |
 `,
-    );
-  },
+		);
+	},
 };

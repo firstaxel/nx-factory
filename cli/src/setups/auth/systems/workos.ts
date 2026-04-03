@@ -1,59 +1,62 @@
 import path from "path";
 import { writeFile, ensureDir } from "../../../files.js";
+import { scopedPackageName } from "../../../config.js";
 import type { AuthPackageScaffolder, AuthPackageOptions } from "../types.js";
 
 export const workosScaffolder: AuthPackageScaffolder = {
-  label: "WorkOS AuthKit",
+	label: "WorkOS AuthKit",
 
-  dependencies: {
-    "@workos-inc/authkit-nextjs": "latest",
-    "@workos-inc/node":           "latest",
-  },
+	dependencies: {
+		"@workos-inc/authkit-nextjs": "latest",
+		"@workos-inc/node": "latest",
+	},
 
-  devDependencies: {
-    "@types/react": "^19.0.0",
-  },
+	devDependencies: {
+		"@types/react": "^19.0.0",
+	},
 
-  peerDependencies: {
-    react:       "^18 || ^19",
-    "react-dom": "^18 || ^19",
-  },
+	peerDependencies: {
+		react: "^18 || ^19",
+		"react-dom": "^18 || ^19",
+	},
 
-  async scaffold(pkgDir: string, _opts: AuthPackageOptions): Promise<void> {
-    await ensureDir(path.join(pkgDir, "."));
+	async scaffold(pkgDir: string, opts: AuthPackageOptions): Promise<void> {
+		const authPackageName = scopedPackageName(opts.scope, "auth");
 
-    // ── index.ts ──────────────────────────────────────────────────────────
-    await writeFile(
-      path.join(pkgDir, "index.ts"),
-      `/**
- * @workspace/auth — WorkOS AuthKit latest setup.
+		await ensureDir(path.join(pkgDir, "."));
+
+		// ── index.ts ──────────────────────────────────────────────────────────
+		await writeFile(
+			path.join(pkgDir, "index.ts"),
+			`/**
+ * ${authPackageName} — WorkOS AuthKit latest setup.
  *
  * Prefer sub-path imports:
- *   import { getUser, withAuth }  from "@workspace/auth/server"
- *   import { useAuth }            from "@workspace/auth/client"
- *   import { authMiddleware }     from "@workspace/auth/next"
+ *   import { getUser, withAuth }  from "${authPackageName}/server"
+ *   import { useAuth }            from "${authPackageName}/client"
+ *   import { authMiddleware }     from "${authPackageName}/next"
  */
 export * from "./server.js";
 export * from "./client.js";
 `,
-    );
+		);
 
-    await writeFile(
-      path.join(pkgDir, "next.ts"),
-      `/** Next.js adapter for @workspace/auth (WorkOS). */
+		await writeFile(
+			path.join(pkgDir, "next.ts"),
+			`/** Next.js adapter for ${authPackageName} (WorkOS). */
 export {
   authMiddleware,
   buildMiddleware,
   middlewareConfig,
 } from "./middleware.js";
 `,
-    );
+		);
 
-    // ── server.ts ─────────────────────────────────────────────────────────
-    // AuthKit v1+: getUser() replaces getSession(), withAuth() HOC
-    await writeFile(
-      path.join(pkgDir, "server.ts"),
-      `/**
+		// ── server.ts ─────────────────────────────────────────────────────────
+		// AuthKit v1+: getUser() replaces getSession(), withAuth() HOC
+		await writeFile(
+			path.join(pkgDir, "server.ts"),
+			`/**
  * WorkOS AuthKit v1+ — server-side helpers.
  *
  * AuthKit v1 changes from v0:
@@ -62,18 +65,18 @@ export {
  *   - handleAuth()  — still the catch-all callback handler
  *
  * @example Server Component (manual check)
- *   import { getUser } from "@workspace/auth/server";
+ *   import { getUser } from "${authPackageName}/server";
  *   const { user } = await getUser();
  *   if (!user) redirect("/sign-in");
  *
  * @example Server Component (HOC — auto-redirects)
- *   import { withAuth } from "@workspace/auth/server";
+ *   import { withAuth } from "${authPackageName}/server";
  *   export default withAuth(async function Page({ user }) {
  *     return <h1>Hello {user.firstName}</h1>;
  *   });
  *
  * @example Sign-in redirect
- *   import { getSignInUrl } from "@workspace/auth/server";
+ *   import { getSignInUrl } from "${authPackageName}/server";
  *   redirect(await getSignInUrl());
  */
 
@@ -99,7 +102,7 @@ export type {
  * Low-level WorkOS Node SDK.
  * Use for organization management, directory sync, audit logs, etc.
  *
- *   import { workos } from "@workspace/auth/server";
+ *   import { workos } from "${authPackageName}/server";
  *   const orgs = await workos.organizations.listOrganizations();
  */
 import WorkOS from "@workos-inc/node";
@@ -111,26 +114,26 @@ if (!process.env.WORKOS_API_KEY) {
 export const workos = new WorkOS(process.env.WORKOS_API_KEY);
 export const workosClientId = process.env.WORKOS_CLIENT_ID!;
 `,
-    );
+		);
 
-    // ── client.ts ─────────────────────────────────────────────────────────
-    // AuthKit v1: useAuth() hook from the /components sub-path
-    await writeFile(
-      path.join(pkgDir, "client.ts"),
-      `/**
+		// ── client.ts ─────────────────────────────────────────────────────────
+		// AuthKit v1: useAuth() hook from the /components sub-path
+		await writeFile(
+			path.join(pkgDir, "client.ts"),
+			`/**
  * WorkOS AuthKit v1+ — client-side hooks.
  *
  * The AuthKitProvider is required at the root of apps that use useAuth().
  *
  * @example Root layout
- *   import { AuthKitProvider } from "@workspace/auth/client";
+ *   import { AuthKitProvider } from "${authPackageName}/client";
  *   export default function Layout({ children }) {
  *     return <AuthKitProvider>{children}</AuthKitProvider>;
  *   }
  *
  * @example Any client component
  *   "use client";
- *   import { useAuth } from "@workspace/auth/client";
+ *   import { useAuth } from "${authPackageName}/client";
  *   const { user, loading, getAccessToken } = useAuth();
  */
 "use client";
@@ -140,19 +143,19 @@ export {
   AuthKitProvider, // Required root context provider
 } from "@workos-inc/authkit-nextjs/components";
 `,
-    );
+		);
 
-    // ── middleware.ts ─────────────────────────────────────────────────────
-    // AuthKit v1: authkitMiddleware with middlewareAuth option
-    await writeFile(
-      path.join(pkgDir, "middleware.ts"),
-      `/**
+		// ── middleware.ts ─────────────────────────────────────────────────────
+		// AuthKit v1: authkitMiddleware with middlewareAuth option
+		await writeFile(
+			path.join(pkgDir, "middleware.ts"),
+			`/**
  * WorkOS AuthKit v1+ — Next.js middleware.
  *
  * Quick start — copy into apps/<your-app>/middleware.ts:
  *
  *   import type { NextRequest } from "next/server";
- *   import { authMiddleware, middlewareConfig } from "@workspace/auth/middleware";
+ *   import { authMiddleware, middlewareConfig } from "${authPackageName}/middleware";
  *
  *   export default function middleware(request: NextRequest) {
  *     return authMiddleware(request);
@@ -162,9 +165,9 @@ export {
  *
  * Custom public paths:
  *
- *   import { buildMiddleware } from "@workspace/auth/middleware";
+ *   import { buildMiddleware } from "${authPackageName}/middleware";
  *   export default buildMiddleware({ unauthenticatedPaths: ["/", "/about"] });
- *   export { middlewareConfig as config } from "@workspace/auth/middleware";
+ *   export { middlewareConfig as config } from "${authPackageName}/middleware";
  */
 import { authkitMiddleware } from "@workos-inc/authkit-nextjs";
 import type { AuthkitMiddlewareOptions } from "@workos-inc/authkit-nextjs";
@@ -212,12 +215,12 @@ export function buildMiddleware({
   });
 }
 `,
-    );
+		);
 
-    // ── .env.example ─────────────────────────────────────────────────────────
-    await writeFile(
-      path.join(pkgDir, ".env.example"),
-      `# ─── WorkOS AuthKit v1+ ──────────────────────────────────────────────────────
+		// ── .env.example ─────────────────────────────────────────────────────────
+		await writeFile(
+			path.join(pkgDir, ".env.example"),
+			`# ─── WorkOS AuthKit v1+ ──────────────────────────────────────────────────────
 # Get these from: https://dashboard.workos.com → your app → API Keys
 WORKOS_API_KEY=sk_REPLACE_ME
 WORKOS_CLIENT_ID=client_REPLACE_ME
@@ -232,12 +235,12 @@ WORKOS_COOKIE_PASSWORD=REPLACE_WITH_RANDOM_32_CHAR_STRING
 # The public URL of your app
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 `,
-    );
+		);
 
-    // ── README.md ─────────────────────────────────────────────────────────────
-    await writeFile(
-      path.join(pkgDir, "README.md"),
-      `# @workspace/auth — WorkOS AuthKit v1+
+		// ── README.md ─────────────────────────────────────────────────────────────
+		await writeFile(
+			path.join(pkgDir, "README.md"),
+			`# ${authPackageName} — WorkOS AuthKit v1+
 
 Shared authentication powered by [WorkOS AuthKit](https://workos.com/docs/user-management) — enterprise SSO, SCIM, MFA, magic auth, and a hosted sign-in UI.
 
@@ -258,20 +261,20 @@ Fill in from your [WorkOS Dashboard](https://dashboard.workos.com):
 
 ### 2. Add the dependency
 \`\`\`json
-{ "dependencies": { "@workspace/auth": "workspace:*" } }
+{ "dependencies": { "${authPackageName}": "workspace:*" } }
 \`\`\`
 
 ### 3. Add the callback route
 \`\`\`ts
 // apps/<your-app>/app/callback/route.ts
-export { handleAuth as GET } from "@workspace/auth/server";
+export { handleAuth as GET } from "${authPackageName}/server";
 \`\`\`
 
 ### 4. Add the middleware
 \`\`\`ts
 // apps/<your-app>/middleware.ts
 import type { NextRequest } from "next/server";
-import { authMiddleware, middlewareConfig } from "@workspace/auth/next";
+import { authMiddleware, middlewareConfig } from "${authPackageName}/next";
 
 export default function middleware(request: NextRequest) {
   return authMiddleware(request);
@@ -283,7 +286,7 @@ export const config = middlewareConfig;
 ### 5. Wrap your layout with AuthKitProvider
 \`\`\`tsx
 // apps/<your-app>/app/layout.tsx
-import { AuthKitProvider } from "@workspace/auth/client";
+import { AuthKitProvider } from "${authPackageName}/client";
 export default function Layout({ children }) {
   return <AuthKitProvider>{children}</AuthKitProvider>;
 }
@@ -292,22 +295,22 @@ export default function Layout({ children }) {
 ### 6. Use in your pages
 \`\`\`tsx
 // Server component — HOC (auto-redirects if not signed in)
-import { withAuth } from "@workspace/auth/server";
+import { withAuth } from "${authPackageName}/server";
 export default withAuth(async function Page({ user }) {
   return <h1>Hello, {user.firstName}</h1>;
 });
 
 // Server component — manual
-import { getUser } from "@workspace/auth/server";
+import { getUser } from "${authPackageName}/server";
 const { user } = await getUser();
 
 // Client component
 "use client";
-import { useAuth } from "@workspace/auth/client";
+import { useAuth } from "${authPackageName}/client";
 const { user, loading } = useAuth();
 
 // Sign-in redirect page
-import { getSignInUrl } from "@workspace/auth/server";
+import { getSignInUrl } from "${authPackageName}/server";
 import { redirect }     from "next/navigation";
 export default async function SignIn() { redirect(await getSignInUrl()); }
 \`\`\`
@@ -316,11 +319,11 @@ export default async function SignIn() { redirect(await getSignInUrl()); }
 
 | Sub-path | Key exports |
 |---|---|
-| \`@workspace/auth/server\` | \`getUser()\`, \`withAuth()\`, \`getSignInUrl()\`, \`handleAuth\`, \`workos\`, \`signOut()\` |
-| \`@workspace/auth/client\` | \`useAuth\`, \`AuthKitProvider\` |
-| \`@workspace/auth/middleware\` | \`authMiddleware\`, \`buildMiddleware()\`, \`middlewareConfig\` |
-| \`@workspace/auth/next\` | \`authMiddleware\`, \`buildMiddleware()\`, \`middlewareConfig\` |
+| \`${authPackageName}/server\` | \`getUser()\`, \`withAuth()\`, \`getSignInUrl()\`, \`handleAuth\`, \`workos\`, \`signOut()\` |
+| \`${authPackageName}/client\` | \`useAuth\`, \`AuthKitProvider\` |
+| \`${authPackageName}/middleware\` | \`authMiddleware\`, \`buildMiddleware()\`, \`middlewareConfig\` |
+| \`${authPackageName}/next\` | \`authMiddleware\`, \`buildMiddleware()\`, \`middlewareConfig\` |
 `,
-    );
-  },
+		);
+	},
 };

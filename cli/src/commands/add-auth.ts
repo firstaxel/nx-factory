@@ -329,7 +329,7 @@ export async function addAuthCommand(options: AddAuthOptions): Promise<void> {
 				...(!options.provider
 					? [
 							{
-								type: "list",
+								type: "select",
 								name: "provider",
 								message: q(
 									"Auth provider",

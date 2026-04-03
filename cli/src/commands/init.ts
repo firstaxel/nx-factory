@@ -69,7 +69,7 @@ export async function initCommand(options: InitOptions): Promise<void> {
 						c.red("Only lowercase letters, numbers, and dashes allowed"),
 				},
 				{
-					type: "list",
+					type: "select",
 					name: "pkgManager",
 					message: q("Package manager"),
 					default: providedPkgManager ?? defaults.pkgManager,
@@ -85,7 +85,7 @@ export async function initCommand(options: InitOptions): Promise<void> {
 						c.red("Only lowercase letters, numbers, and dashes"),
 				},
 				{
-					type: "list",
+					type: "select",
 					name: "baseColor",
 					message: q(
 						"Base color theme",

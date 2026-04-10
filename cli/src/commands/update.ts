@@ -51,7 +51,10 @@ export async function updateCommand(
 		const { selected } = await inquirer.prompt({
 			type: "checkbox",
 			name: "selected",
-			message: `${c.purple("?")} ${c.white("Which components do you want to update?")}`,
+			message: q(
+				"Which components do you want to update?",
+				"defaults to all · space to deselect",
+			),
 			choices: installed.map((comp) => ({
 				name: comp,
 				value: comp,

@@ -90,7 +90,10 @@ export async function addComponentCommand(components: string[]): Promise<void> {
 		const answers = await inquirer.prompt({
 			type: "checkbox",
 			name: "components",
-			message: `${c.purple("?")} ${c.white("Which shadcn components do you want to add?")}`,
+			message: q(
+				"Which shadcn components do you want to add?",
+				"space to toggle · enter to confirm · arrows to scroll",
+			),
 			choices: availableComponents,
 			pageSize: 15,
 			loop: true,

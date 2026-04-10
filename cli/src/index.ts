@@ -12,6 +12,11 @@ import { addLibCommand } from "./commands/add-lib.js";
 import { addStorybookCommand } from "./commands/add-storybook.js";
 import { publishCommand } from "./commands/publish.js";
 import { addAuthCommand } from "./commands/add-auth.js";
+import { migrateCommand } from "./commands/migrate.js";
+import { createRequire } from "module";
+
+const _require = createRequire(import.meta.url);
+const _pkg = _require("../package.json") as { version: string };
 
 const program = new Command();
 
@@ -22,7 +27,7 @@ program
 	.description(
 		"Initialize and manage an Nx monorepo with shared shadcn/ui components",
 	)
-	.version("1.0.0");
+	.version(_pkg.version);
 
 program
 	.command("init")
@@ -126,5 +131,12 @@ program
 	.option("-y, --yes", "Skip all prompts and use defaults")
 	.option("--dry-run", "Preview what would be created without writing anything")
 	.action(addAuthCommand);
+
+program
+	.command("migrate")
+	.description("Migrate an existing nx-factory-cli workspace to the latest configuration")
+	.option("-y, --yes", "Skip confirmation prompts")
+	.option("--dry-run", "Preview what would be changed without writing anything")
+	.action(migrateCommand);
 
 program.parse();

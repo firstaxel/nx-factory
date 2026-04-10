@@ -1,10 +1,10 @@
 ---
 title: CLI Reference
-description: Full command-by-command reference for nx-factory.
+description: Complete command reference for nx-factory-cli on a single page.
 icon: Terminal
 ---
 
-`nx-factory` scaffolds and manages Nx monorepos with shared UI and shared auth packages.
+nx-factory-cli scaffolds and manages Nx monorepos with a shared UI package, auth, and a production-ready TypeScript config hierarchy.
 
 ## Install
 
@@ -12,38 +12,41 @@ icon: Terminal
 # Global install
 npm install -g nx-factory-cli
 
-# Or run without installing
+# Run without installing
 npx nx-factory-cli init
 ```
 
-## Command Overview
+## Command overview
 
 | Command | Purpose |
-| --- | --- |
-| `init` | Bootstrap a new Nx monorepo with shared UI package |
-| `add-app` | Add a new app in `apps/` and wire shared UI |
-| `add-auth` | Scaffold `packages/auth` with provider templates |
-| `add-component` | Add shadcn components to shared UI package |
-| `remove-component` | Remove shadcn components from shared UI package |
-| `update` | Update installed shadcn components |
-| `list` | List shared UI components and usage |
-| `doctor` | Run workspace checks and auto-fix some issues |
-| `add-lib` | Create a generic shared library in `packages/` |
-| `add-storybook` | Set up Storybook for shared UI package |
-| `publish` | Build and publish shared UI package |
+|---|---|
+| `init` | Bootstrap a new Nx monorepo |
+| `add-app` | Add an app via its official framework CLI |
+| `add-auth` | Scaffold `packages/auth` with Clerk, Better Auth, or WorkOS |
+| `add-component` | Add shadcn/ui components to the shared UI package |
+| `remove-component` | Remove shadcn/ui components |
+| `update` | Update installed shadcn/ui components |
+| `list` | List components and their usage across apps |
+| `doctor` | Validate workspace health and auto-fix barrel exports |
+| `add-lib` | Scaffold a typed shared library |
+| `add-storybook` | Set up Storybook for the shared UI package |
+| `publish` | Build and publish the shared UI package to npm |
+| `migrate` | Migrate an existing workspace to the latest configuration |
 
-## Common Flags
+## Common flags
 
-Many commands support:
+All commands that write files support:
 
 | Flag | Description |
-| --- | --- |
-| `--dry-run` | Preview planned writes/changes without modifying files |
-| `-y`, `--yes` | Skip prompts and use defaults/confirmation |
+|---|---|
+| `--dry-run` | Preview planned changes without writing anything |
+| `-y`, `--yes` | Skip prompts and use defaults |
+
+---
 
 ## init
 
-Initialize a new Nx workspace and scaffold shared UI foundations.
+Bootstrap a new Nx monorepo with shared UI scaffolding.
 
 ```bash
 nx-factory-cli init
@@ -55,182 +58,149 @@ nx-factory-cli init --dry-run
 ### Options
 
 | Option | Description |
-| --- | --- |
+|---|---|
 | `-n, --name <n>` | Workspace name |
-| `-p, --pkg-manager <manager>` | Package manager: `npm`, `pnpm`, `yarn`, `bun` |
+| `-p, --pkg-manager <manager>` | `npm`, `pnpm`, `yarn`, `bun` |
 | `-y, --yes` | Use defaults without prompting |
 | `--dry-run` | Show planned steps only |
 
-### What It Does
+### What it creates
 
-- Creates Nx workspace root and package manager workspace setup
-- Creates `apps/` and `packages/`
-- Scaffolds shared UI package and Tailwind/shadcn setup
-- Optionally scaffolds an example app
-- Writes `nx-factory.config.json` at the monorepo root
+- `tsconfig.base.json` — NodeNext resolution, strict, global `@scope/*` paths
+- `nx-factory.config.json` — workspace metadata
+- `packages/ui/` — shadcn/ui + Tailwind v4, exports field, tsconfig extending base
+- `apps/example-app/` — (optional) Next.js app pre-wired to `@scope/ui`
+
+---
 
 ## add-app
 
-Scaffold a new app and wire it to the shared UI package.
+Scaffold a new app using its official framework CLI, then wire it to `@workspace/ui`.
 
 ```bash
 nx-factory-cli add-app
 nx-factory-cli add-app --name dashboard --framework nextjs
-nx-factory-cli add-app --name marketing --framework vite
-nx-factory-cli add-app --name admin --framework remix --yes
+nx-factory-cli add-app --name api --framework vite --yes
 ```
 
 ### Options
 
 | Option | Description |
-| --- | --- |
+|---|---|
 | `-n, --name <n>` | App name |
 | `-f, --framework <framework>` | `nextjs`, `vite`, `remix`, `expo` |
-| `-y, --yes` | Use defaults without prompting |
-| `--dry-run` | Show planned scaffold steps |
+| `-y, --yes` | Skip prompts |
+| `--dry-run` | Preview without writing |
 
-### What It Does
+### Supported frameworks
 
-- Scaffolds framework project under `apps/<name>`
-- Adds `@workspace/ui` dependency to app package.json
-- Patches framework config for shared UI styles
-- Patches app tsconfig path aliases
+| Key | Scaffolder |
+|---|---|
+| `nextjs` | `create-next-app@latest` |
+| `vite` | `create-vite@latest --template react-ts` |
+| `remix` | `create-remix@latest` |
+| `expo` | `create-expo-app@latest` |
+
+---
 
 ## add-auth
 
-Create `packages/auth` and generate provider-specific server/client/next templates.
+Create `packages/auth` with a full auth setup.
 
 ```bash
 nx-factory-cli add-auth
-nx-factory-cli add-auth --provider better-auth
-nx-factory-cli add-auth --provider clerk --yes
-nx-factory-cli add-auth --dry-run
+nx-factory-cli add-auth --provider clerk
+nx-factory-cli add-auth --provider better-auth --app dashboard
+nx-factory-cli add-auth --provider workos --framework nextjs
 ```
 
 ### Options
 
 | Option | Description |
-| --- | --- |
+|---|---|
+| `-a, --app <n>` | Target a specific app |
 | `-p, --provider <provider>` | `clerk`, `better-auth`, `workos` |
-| `-a, --app <name>` | Target app in `apps/` (accepted by CLI surface) |
-| `-f, --framework <framework>` | Framework hint: `nextjs`, `vite`, `remix`, `expo` (accepted by CLI surface) |
-| `-y, --yes` | Use defaults without prompting |
-| `--dry-run` | Preview generated files and wiring |
+| `-f, --framework <framework>` | Framework hint (`nextjs`, `vite`, `remix`, `expo`) |
+| `-y, --yes` | Skip prompts |
+| `--dry-run` | Preview without writing |
 
-### What It Does
+### Provider packages installed (framework-aware)
 
-- Generates `packages/auth` with provider-specific files
-- Builds exports for:
--	- `@<scope>/auth/server`
--	- `@<scope>/auth/client`
--	- `@<scope>/auth/middleware`
--	- `@<scope>/auth/next`
-- Optionally wires selected app package.json files with `@<scope>/auth`
+| Provider | Next.js | Vite | Remix | Expo |
+|---|---|---|---|---|
+| Clerk | `@clerk/nextjs` | `@clerk/react` | `@clerk/remix` | `@clerk/expo` |
+| Better Auth | `better-auth` | `better-auth` | `better-auth` | `better-auth` |
+| WorkOS | `@workos-inc/authkit-nextjs` + `@workos-inc/node` | `@workos-inc/node` | `@workos-inc/node` | `@workos-inc/node` |
 
-### Framework Usage
-
-- Next apps: import middleware/route helpers from `@<scope>/auth/next`
-- Vite/Expo apps: primarily use `@<scope>/auth/client` and point to an auth host
-- Remix apps: use `server` + `client` exports and add framework route wiring
+---
 
 ## add-component
 
-Add one or more shadcn components to the shared UI package.
+Add shadcn/ui components to the shared UI package.
 
 ```bash
 nx-factory-cli add-component
-nx-factory-cli add-component button card dialog
-nx-factory-cli add-component data-table --dry-run
+nx-factory-cli add-component button card dialog input
 ```
 
-### Arguments and Options
+Runs `shadcn@latest add --yes` inside `packages/ui` and updates the barrel export.
 
-| Input | Description |
-| --- | --- |
-| `[components...]` | Component names (optional; interactive when omitted) |
-| `--dry-run` | Preview only |
-
-### What It Does
-
-- Adds shadcn component files in shared UI package
-- Updates barrel exports so components are importable from `@workspace/ui`
+---
 
 ## remove-component
 
-Remove one or more components from shared UI package.
+Remove components from the shared UI package.
 
 ```bash
-nx-factory-cli remove-component
-nx-factory-cli remove-component button tooltip
-nx-factory-cli remove-component dialog --yes
+nx-factory-cli remove-component button
+nx-factory-cli remove-component tooltip badge --yes
 ```
 
-### Arguments and Options
+Removes component files and cleans the barrel export.
 
-| Input | Description |
-| --- | --- |
-| `[components...]` | Component names (optional; interactive when omitted) |
-| `-y, --yes` | Skip confirmation prompts |
-| `--dry-run` | Preview only |
-
-### What It Does
-
-- Removes component source files
-- Cleans related exports from shared UI barrel
+---
 
 ## update
 
-Update installed shadcn components.
+Update installed shadcn/ui components to their latest templates.
 
 ```bash
-nx-factory-cli update
-nx-factory-cli update button card
+nx-factory-cli update               # update all
+nx-factory-cli update button card   # update specific
 nx-factory-cli update --yes
-nx-factory-cli update --dry-run
 ```
 
-### Arguments and Options
+Runs `shadcn@latest add --overwrite`. Local modifications to component files will be overwritten.
 
-| Input | Description |
-| --- | --- |
-| `[components...]` | Specific components; defaults to all |
-| `-y, --yes` | Skip confirmations |
-| `--dry-run` | Preview only |
-
-### What It Does
-
-- Checks installed components
-- Re-syncs component implementations to current templates
+---
 
 ## list
 
-List shared UI components and where they are used.
+List installed components and show which apps import each one.
 
 ```bash
 nx-factory-cli list
 ```
 
-### What It Does
+Also flags components that are installed but missing from the barrel export.
 
-- Enumerates installed components
-- Shows usage context across apps/workspace where supported
+---
 
 ## doctor
 
-Run workspace health checks and fix common issues.
+Validate workspace health and auto-fix barrel export issues.
 
 ```bash
 nx-factory-cli doctor
 ```
 
-### What It Does
+Checks tsconfig inheritance, path aliases, barrel exports, and `package.json` exports field. Auto-fixes missing barrel exports.
 
-- Validates expected workspace layout and config
-- Detects and can auto-fix some export/barrel inconsistencies
+---
 
 ## add-lib
 
-Scaffold a generic shared library in `packages/`.
+Scaffold a typed shared library in `packages/`.
 
 ```bash
 nx-factory-cli add-lib
@@ -241,259 +211,128 @@ nx-factory-cli add-lib --name api-client --type api --yes
 ### Options
 
 | Option | Description |
-| --- | --- |
+|---|---|
 | `-n, --name <n>` | Library name |
 | `-t, --type <type>` | `utils`, `hooks`, `config`, `types`, `api` |
-| `-y, --yes` | Use defaults without prompting |
-| `--dry-run` | Preview only |
+| `-y, --yes` | Skip prompts |
+| `--dry-run` | Preview without writing |
 
-### What It Does
+Prompts for **visibility** — `internal` (workspace only) or `public` (published to npm). Shapes both `package.json` and `tsconfig.json` accordingly.
 
-- Creates a typed library package under `packages/`
-- Wires package metadata/build config for workspace usage
+---
 
 ## add-storybook
 
-Set up Storybook for shared UI package.
+Add Storybook to the shared UI package.
 
 ```bash
 nx-factory-cli add-storybook
 nx-factory-cli add-storybook --dry-run
 ```
 
-### Options
+Runs `storybook init` and generates starter stories for installed components.
 
-| Option | Description |
-| --- | --- |
-| `--dry-run` | Preview Storybook setup changes |
-
-### What It Does
-
-- Adds Storybook configuration
-- Generates starter stories for discovered components where possible
+---
 
 ## publish
 
-Build and publish shared UI package.
+Build and publish the shared UI package to npm.
 
 ```bash
 nx-factory-cli publish
 nx-factory-cli publish --tag next
-nx-factory-cli publish --yes
-nx-factory-cli publish --dry-run
+nx-factory-cli publish --yes --dry-run
 ```
 
 ### Options
 
 | Option | Description |
-| --- | --- |
-| `--tag <tag>` | npm dist-tag (default `latest`) |
-| `-y, --yes` | Skip prompts/confirmation |
-| `--dry-run` | Preview publish workflow |
+|---|---|
+| `--tag <tag>` | npm dist-tag (default: `latest`) |
+| `-y, --yes` | Skip confirmation |
+| `--dry-run` | Preview steps without publishing |
 
-### What It Does
+Requires the UI package to have `visibility: public` (no `private: true`).
 
-- Builds package artifacts
-- Runs publish flow with configured npm tag
+---
 
-## End-to-End Example
+## migrate
+
+Migrate an existing workspace to the latest nx-factory-cli configuration.
 
 ```bash
-npx nx-factory-cli init --name acme-workspace --pkg-manager pnpm
-cd acme-workspace
+nx-factory-cli migrate
+nx-factory-cli migrate --yes
+nx-factory-cli migrate --dry-run
+```
+
+### Options
+
+| Option | Description |
+|---|---|
+| `-y, --yes` | Skip confirmation |
+| `--dry-run` | Preview what would change |
+
+### What it migrates
+
+| Issue | Action |
+|---|---|
+| Missing `tsconfig.base.json` | Creates it with NodeNext, strict, paths |
+| Package tsconfigs missing `composite` or using `bundler` resolution | Regenerates via factory |
+| App tsconfigs missing `extends` or with `packages/**/*` in `include` | Regenerates via factory |
+| Missing `uiPackageVisibility` in config | Prompts and updates `nx-factory.config.json` |
+| Missing `exports` field in UI `package.json` | Adds it |
+
+Backs up every changed file as `<file>.migration-backup`.
+
+---
+
+## Quick workflow
+
+```bash
+# 1. Create workspace
+npx nx-factory-cli init --name acme --pkg-manager pnpm
+
+# 2. Add apps
+cd acme
 nx-factory-cli add-app --name web --framework nextjs
+nx-factory-cli add-app --name admin --framework vite
+
+# 3. Add auth
 nx-factory-cli add-auth --provider better-auth
-nx-factory-cli add-component button card input
-nx-factory-cli doctor
+
+# 4. Add components
+nx-factory-cli add-component button card dialog input label
+
+# 5. Build shared packages
+pnpm nx run-many --target=build --projects=@acme/ui,@acme/auth
+
+# 6. Start dev
+pnpm nx run-many --target=dev --projects=web,admin
 ```
 
 ## Troubleshooting
 
 ### Could not find monorepo root
 
-Run commands from inside your generated workspace root (the folder containing `nx.json` and `nx-factory.config.json`).
+Run commands from inside the workspace (the folder containing `nx-factory.config.json` and `nx.json`). The CLI walks up the directory tree looking for these files, so running from any subdirectory works.
 
-### Runtime import/module errors
+### Missing .js extension errors at runtime
 
-Rebuild from the CLI package root:
+`NodeNext` module resolution requires `.js` extensions on relative imports in `.ts` source files. This is correct — TypeScript compiles `.ts` → `.js` and Node resolves the `.js` at runtime. Any existing imports without `.js` should be updated.
 
-```bash
-npm run build
-```
+### TypeScript can't find @workspace/* packages
 
-### Config file location
+Ensure `tsconfig.base.json` exists at the workspace root and that all app and package `tsconfig.json` files extend it with `"extends": "../../tsconfig.base.json"`. Run `nx-factory-cli doctor` to diagnose.
 
-`nx-factory.config.json` is written to the created workspace root during `init`.
+### Build order errors (package not built)
 
-
-## `nx-factory-cli init`
-
-Create a new Nx workspace with `apps/` + `packages/` layout.
+The `nx.json` `targetDefaults` sets `build.dependsOn: ["^build"]` so Nx builds dependencies first. If a package is missing, run:
 
 ```bash
-nx-factory-cli init
-nx-factory-cli init --name my-monorepo --pkg-manager pnpm
-nx-factory-cli init --yes
-nx-factory-cli init --dry-run
+pnpm nx build @workspace/ui --verbose
 ```
 
-### Options
+### Existing workspace missing tsconfig.base.json
 
-| Option | Description |
-| --- | --- |
-| `-n`, `--name <name>` | Workspace name |
-| `-p`, `--pkg-manager <manager>` | Package manager (`pnpm`, `npm`, `yarn`, `bun`) |
-| `-y`, `--yes` | Skip prompts |
-| `--dry-run` | Preview only |
-
-### Creates
-
-- Nx workspace files (`nx.json`, root `package.json`, `tsconfig.base.json`)
-- `apps/` and `packages/` folders
-- Shared UI package in `packages/ui` (or your chosen package name)
-- `nx-factory.config.json` in the workspace root
-
-## `nx-factory-cli add-app`
-
-Scaffold a new app and wire it to the shared UI package.
-
-```bash
-nx-factory-cli add-app
-nx-factory-cli add-app --name dashboard --framework nextjs
-nx-factory-cli add-app --name marketing --framework vite
-```
-
-### Options
-
-| Option | Description |
-| --- | --- |
-| `-n`, `--name <name>` | App name |
-| `-f`, `--framework <framework>` | `nextjs`, `vite`, `remix`, `expo` |
-| `-y`, `--yes` | Skip prompts |
-| `--dry-run` | Preview only |
-
-### Notes
-
-- Next.js apps are scaffolded `src` directory mode.
-- App tsconfig is patched to include `@workspace/*` paths.
-- Framework config gets patched for shared UI styles.
-
-## `nx-factory-cli add-auth`
-
-Generate `packages/auth` and wire selected apps to use it.
-
-```bash
-nx-factory-cli add-auth
-nx-factory-cli add-auth --provider better-auth
-nx-factory-cli add-auth --provider clerk
-nx-factory-cli add-auth --provider workos
-```
-
-### Options
-
-| Option | Description |
-| --- | --- |
-| `--provider <provider>` | `better-auth`, `clerk`, `workos` |
-| `-y`, `--yes` | Skip prompts |
-| `--dry-run` | Preview only |
-
-### Generated exports
-
-- `@<scope>/auth/server`
-- `@<scope>/auth/client`
-- `@<scope>/auth/middleware`
-- `@<scope>/auth/next` (Next.js adapter)
-
-### Framework guidance
-
-- Next apps: import middleware/route helpers from `@<scope>/auth/next`.
-- Vite/Expo apps: use `@<scope>/auth/client` and point to an auth host URL.
-- Remix: use server/client exports and provider-specific route wiring.
-
-## `nx-factory-cli add-component`
-
-Add one or more shadcn components to the shared UI package.
-
-```bash
-nx-factory-cli add-component
-nx-factory-cli add-component button card dialog
-```
-
-### Options
-
-| Option | Description |
-| --- | --- |
-| `[components...]` | Optional component names |
-| `--dry-run` | Preview only |
-
-## `nx-factory-cli remove-component`
-
-Remove components from the shared UI package.
-
-```bash
-nx-factory-cli remove-component
-nx-factory-cli remove-component button dialog
-```
-
-### Options
-
-| Option | Description |
-| --- | --- |
-| `[components...]` | Optional component names |
-| `-y`, `--yes` | Skip confirmation |
-| `--dry-run` | Preview only |
-
-## Other Commands
-
-### `nx-factory-cli add-lib`
-
-Create a new internal library under `packages/`.
-
-### `nx-factory-cli add-storybook`
-
-Set up Storybook for a project/workspace.
-
-### `nx-factory-cli list`
-
-List generated workspace resources and status.
-
-### `nx-factory-cli doctor`
-
-Run workspace diagnostics and print actionable fixes.
-
-### `nx-factory-cli update`
-
-Apply updates/migrations to existing generated setup.
-
-### `nx-factory-cli publish`
-
-Assist with package publishing workflow.
-
-## Quick Workflow
-
-```bash
-npx nx-factory-cli init --name acme-workspace --pkg-manager pnpm
-cd acme-workspace
-nx-factory-cli add-app --name web --framework nextjs
-nx-factory-cli add-auth --provider better-auth
-nx-factory-cli add-component button card input
-```
-
-## Troubleshooting
-
-### Could not find monorepo root
-
-Run commands inside your generated workspace root (the folder with `nx-factory.config.json` and `nx.json`).
-
-### Missing module at runtime
-
-Use Node ESM-compatible imports in generated TS output and run a fresh build:
-
-```bash
-npm run build
-```
-
-### Config file saved in wrong place
-
-`init` saves `nx-factory.config.json` to the created workspace root.
-If you moved folders manually, regenerate or move the config to the monorepo root.
+Run `nx-factory-cli migrate` — it detects and creates the file.

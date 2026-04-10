@@ -1,6 +1,6 @@
 ---
 title: add-storybook
-description: Add Storybook to the shared UI package.
+description: Add Storybook to the shared UI package with auto-generated starter stories for installed components.
 ---
 
 ## Usage
@@ -13,10 +13,45 @@ nx-factory-cli add-storybook --dry-run
 ## Options
 
 | Option | Description |
-| --- | --- |
-| `--dry-run` | Preview setup without writing |
+|---|---|
+| `--dry-run` | Preview what would be created without writing anything |
 
-## What It Does
+## What it does
 
-- Adds Storybook config for shared UI package
-- Generates starter stories for components where supported
+1. Runs `storybook init` inside `packages/ui` to install and configure Storybook
+2. Detects all installed shadcn/ui components
+3. Generates a starter `.stories.tsx` file for each component with a `Default` story
+
+## After setup
+
+```bash
+# Run Storybook in the UI package
+cd packages/ui
+pnpm storybook
+
+# Or from the workspace root via Nx
+pnpm nx storybook @workspace/ui
+```
+
+## Generated story format
+
+```tsx
+// packages/ui/components/ui/button.stories.tsx
+import type { Meta, StoryObj } from "@storybook/react";
+import { Button } from "./button";
+
+const meta: Meta<typeof Button> = {
+  component: Button,
+};
+export default meta;
+
+type Story = StoryObj<typeof Button>;
+
+export const Default: Story = {
+  args: {
+    children: "Button",
+  },
+};
+```
+
+Stories are generated as a starting point — extend them with your own variants, controls, and interaction tests.

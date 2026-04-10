@@ -1,8 +1,14 @@
 import inquirer from "inquirer";
 import path from "path";
 import { pathExists, writeJson, writeFile, ensureDir } from "../files.js";
+import { type PackageVisibility } from "../config.js";
+import { packageTsConfig } from "../tsconfigs.js";
 import { loadConfig, resolveScope, scopedPackageName } from "../config.js";
-import { detectPackageManager } from "../exec.js";
+import { detectPackageManager, pmWorkspaceProtocol } from "../exec.js";
+import {
+	requireMonorepoRoot,
+	MonorepoRootNotFoundError,
+} from "../resolve-root.js";
 import {
 	c,
 	q,
@@ -23,26 +29,43 @@ interface AddLibOptions {
 }
 
 export async function addLibCommand(options: AddLibOptions): Promise<void> {
-	// Verify monorepo root
-	if (!(await pathExists(path.join(process.cwd(), "package.json")))) {
-		printError({
-			title: "No package.json found",
-			detail: "Run this command from the monorepo root.",
-			recovery: [
-				{ label: "", cmd: "cd <monorepo-root> && nx-factory-cli add-lib" },
-			],
-		});
+	// ── Resolve monorepo root from wherever the user invokes this ──────────────
+	// Bug fix: was using process.cwd() directly, which breaks when run from a
+	// subdirectory (e.g. apps/my-app). Use requireMonorepoRoot() like every
+	// other command so the lib always lands in <workspace-root>/packages/.
+	let workspaceRoot: string;
+	try {
+		workspaceRoot = await requireMonorepoRoot();
+	} catch (err) {
+		if (err instanceof MonorepoRootNotFoundError) {
+			printError({
+				title: "Could not find monorepo root",
+				detail: String(err),
+				recovery: [
+					{ label: "Run from inside your nx-factory-cli workspace:", cmd: "cd <monorepo-root>" },
+				],
+			});
+		} else {
+			printError({
+				title: "Unexpected error resolving workspace root",
+				detail: String(err),
+				recovery: [
+					{ label: "Try running from your monorepo root:", cmd: "cd <monorepo-root>" },
+				],
+			});
+		}
 		process.exit(1);
 		return;
 	}
 
 	const cfg = await loadConfig();
 	const scope = resolveScope(cfg);
-	const detectedPm = await detectPackageManager();
+	const detectedPm = await detectPackageManager(workspaceRoot);
 
 	const defaults = {
 		libName: options.name ?? "shared",
 		libType: (options.type ?? "utils") as LibType,
+		visibility: "internal" as PackageVisibility,
 		pm: detectedPm ?? cfg?.pkgManager ?? "pnpm",
 	};
 
@@ -73,6 +96,19 @@ export async function addLibCommand(options: AddLibOptions): Promise<void> {
 				},
 				{
 					type: "select",
+					name: "visibility",
+					message: q(
+						"Package visibility",
+						"internal = private to this monorepo · public = will be published to npm",
+					),
+					choices: [
+						{ name: "internal  — private: true, workspace only", value: "internal" },
+						{ name: "public    — will be published to npm", value: "public" },
+					],
+					default: defaults.visibility,
+				},
+				{
+					type: "select",
 					name: "pm",
 					message: q("Package manager"),
 					choices: ["pnpm", "npm", "yarn", "bun"],
@@ -83,8 +119,11 @@ export async function addLibCommand(options: AddLibOptions): Promise<void> {
 
 	const libName = (answers.libName ?? defaults.libName) as string;
 	const libType = (answers.libType ?? defaults.libType) as LibType;
+	const visibility = (answers.visibility ?? defaults.visibility) as PackageVisibility;
 	const pm = (answers.pm ?? detectedPm ?? cfg?.pkgManager ?? "pnpm") as string;
-	const libDir = path.join(process.cwd(), "packages", libName);
+
+	// Always rooted at workspaceRoot, never process.cwd()
+	const libDir = path.join(workspaceRoot, "packages", libName);
 
 	if (await pathExists(libDir)) {
 		printError({
@@ -104,16 +143,20 @@ export async function addLibCommand(options: AddLibOptions): Promise<void> {
 		`${options.dryRun ? "[dry run] " : ""}Creating packages/${libName}`,
 	);
 
-	const step = createStepRunner(3, options.dryRun);
+	// 2 real steps + done marker = 2 meaningful steps
+	const step = createStepRunner(2, options.dryRun);
 
 	await step("Scaffold package structure", async () => {
-		await ensureDir(path.join(libDir, "."));
+		await ensureDir(libDir);
 
+		const isPublic = visibility === "public";
 		await writeJson(path.join(libDir, "package.json"), {
 			name: scopedPackageName(scope, libName),
 			version: "0.0.1",
-			private: true,
+			...(isPublic ? {} : { private: true }),
 			type: "module",
+			// Always include exports — omitting it loses sub-path support and
+			// gives bundlers no encapsulation contract.
 			exports: {
 				".": {
 					import: "./dist/index.js",
@@ -127,47 +170,37 @@ export async function addLibCommand(options: AddLibOptions): Promise<void> {
 				"build:watch": "tsc -p tsconfig.json --watch",
 				typecheck: "tsc --noEmit",
 			},
+			...(isPublic
+				? {
+						files: ["dist"],
+						publishConfig: { access: "public" },
+				  }
+				: {}),
 			devDependencies: {
 				typescript: "^5.6.0",
 			},
 		});
 
-		await writeJson(path.join(libDir, "tsconfig.json"), {
-			compilerOptions: {
-				target: "ES2022",
-				module: "ESNext",
-				moduleResolution: "bundler",
-				strict: true,
-				declaration: true,
-				declarationMap: true,
-				sourceMap: true,
-				esModuleInterop: true,
-				skipLibCheck: true,
-				outDir: "dist",
-				rootDir: ".",
-			},
-			include: ["**/*"],
-			exclude: ["node_modules", "dist"],
-		});
+		// Use the react flag for hooks libs (they need jsx + DOM)
+		const needsReact = libType === "hooks";
+		await writeJson(
+			path.join(libDir, "tsconfig.json"),
+			packageTsConfig({ scope, pkgName: libName, visibility, react: needsReact }),
+		);
 
-		// Seed index.ts based on lib type
 		await writeFile(
 			path.join(libDir, "index.ts"),
 			getIndexContent(libName, libType, scope),
 		);
 	});
 
-	await step(
-		`Add ${scopedPackageName(scope, libName)} to workspace`,
-		async () => {
-			// For pnpm: pnpm-workspace.yaml is already written by init.
-			// For npm: the workspaces field in root package.json covers packages/*.
-			// Nothing extra to do — the new directory is picked up automatically.
-			void pm; // referenced to avoid unused-var warning
-		},
-	);
-
-	await step("Done", async () => {});
+	await step("Verify workspace registration", async () => {
+		// pnpm-workspace.yaml / root package.json workspaces already covers packages/*
+		// from init. Nothing to write — just confirm the dir exists so the PM picks it up.
+		if (!(await pathExists(libDir))) {
+			throw new Error(`packages/${libName} directory was not created`);
+		}
+	});
 
 	printSuccess({
 		title: `packages/${libName} created`,
@@ -184,8 +217,16 @@ export async function addLibCommand(options: AddLibOptions): Promise<void> {
 		tips: [
 			{
 				label: "Add to an app's dependencies:",
-				cmd: `"${scopedPackageName(scope, libName)}": "${pm === "npm" ? "*" : "workspace:*"}"`,
+				cmd: `"${scopedPackageName(scope, libName)}": "${pmWorkspaceProtocol(pm)}"`,
 			},
+			...(visibility === "public"
+				? [
+						{
+							label: "Publish to npm:",
+							cmd: `${pm} nx build ${scopedPackageName(scope, libName)} && cd packages/${libName} && npm publish`,
+						},
+					]
+				: []),
 		],
 	});
 }

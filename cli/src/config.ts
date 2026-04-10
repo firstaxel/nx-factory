@@ -3,12 +3,15 @@ import { pathExists, readJson, writeJson } from "./files.js";
 
 export const CONFIG_FILENAME = "nx-factory.config.json";
 
+export type PackageVisibility = "internal" | "public";
+
 export interface NxShadcnConfig {
 	workspaceName: string;
-	scope: string; // e.g. "my-monorepo" → packages named @my-monorepo/*
+	scope: string;
 	pkgManager: "pnpm" | "npm" | "yarn" | "bun";
-	uiPackage: string; // e.g. "ui" → lives at packages/ui
-	version: string; // CLI version that wrote this config
+	uiPackage: string;
+	uiPackageVisibility: PackageVisibility;
+	version: string;
 }
 
 /** Convert a workspace/repo name to a valid npm scope segment (without @). */

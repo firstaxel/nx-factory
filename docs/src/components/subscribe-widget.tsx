@@ -5,11 +5,12 @@ interface SubscribeWidgetProps {
 	className?: string;
 }
 
+type SubmitStatus = "idle" | "loading" | "success" | "duplicate" | "error";
+
 export function SubscribeWidget({ className }: SubscribeWidgetProps) {
 	const [email, setEmail] = React.useState("");
-	const [status, setStatus] = React.useState<
-		"idle" | "loading" | "success" | "error"
-	>("idle");
+	const [firstName, setFirstName] = React.useState("");
+	const [status, setStatus] = React.useState<SubmitStatus>("idle");
 	const [errorMsg, setErrorMsg] = React.useState("");
 
 	async function handleSubmit(e: React.FormEvent) {
@@ -20,44 +21,30 @@ export function SubscribeWidget({ className }: SubscribeWidgetProps) {
 		setErrorMsg("");
 
 		try {
-			/**
-			 * Replace this with your actual subscription endpoint.
-			 * Options:
-			 *   - Resend Audiences API
-			 *   - Mailchimp / ConvertKit API
-			 *   - A serverless function in your own backend
-			 *
-			 * Example with Resend:
-			 *   POST https://api.resend.com/audiences/{audience_id}/contacts
-			 *   Authorization: Bearer YOUR_RESEND_API_KEY
-			 *   Body: { email, unsubscribed: false }
-			 */
-			const res = await fetch(
-				`https://api.resend.com/audiences/${process.env.RESEND_AUDIENCE_ID}/contacts`,
-				{
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-					},
-					body: JSON.stringify({ email }),
-				},
-			);
+			const res = await fetch("/api/subscribe", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ email: email.trim(), firstName: firstName.trim() }),
+			});
 
-			if (!res.ok) {
-				const data = (await res.json().catch(() => ({}))) as {
-					message?: string;
-				};
-				throw new Error(data.message ?? "Subscription failed");
-			}
+			const data = (await res.json()) as {
+				ok: boolean;
+				alreadySubscribed?: boolean;
+				message?: string;
+			};
 
-			setStatus("success");
+			if (!data.ok) throw new Error(data.message ?? "Subscription failed");
+
+			setStatus(data.alreadySubscribed ? "duplicate" : "success");
 			setEmail("");
+			setFirstName("");
 		} catch (err) {
 			setStatus("error");
 			setErrorMsg(err instanceof Error ? err.message : "Something went wrong");
 		}
 	}
+
+	const isTerminal = status === "success" || status === "duplicate";
 
 	return (
 		<div
@@ -73,18 +60,40 @@ export function SubscribeWidget({ className }: SubscribeWidgetProps) {
 				<div>
 					<h3 className="font-semibold text-sm">Stay in the loop</h3>
 					<p className="mt-0.5 text-xs text-fd-muted-foreground">
-						Get notified about new commands, breaking changes, and releases.
+						Get notified about new commands, releases, and breaking changes.
 					</p>
 				</div>
 			</div>
 
-			{status === "success" ? (
+			{status === "success" && (
 				<div className="flex items-center gap-2 rounded-lg bg-green-500/10 px-3 py-2.5 text-sm text-green-600 dark:text-green-400">
 					<CheckIcon className="h-4 w-4 shrink-0" />
-					<span>You&apos;re subscribed! We&apos;ll be in touch.</span>
+					<span>You&apos;re subscribed — we&apos;ll be in touch!</span>
 				</div>
-			) : (
+			)}
+
+			{status === "duplicate" && (
+				<div className="flex items-center gap-2 rounded-lg bg-fd-secondary px-3 py-2.5 text-sm text-fd-muted-foreground">
+					<CheckIcon className="h-4 w-4 shrink-0" />
+					<span>You&apos;re already subscribed. Thanks for being here!</span>
+				</div>
+			)}
+
+			{!isTerminal && (
 				<form onSubmit={handleSubmit} className="flex flex-col gap-2">
+					<input
+						type="text"
+						value={firstName}
+						onChange={(e) => setFirstName(e.target.value)}
+						placeholder="First name (optional)"
+						disabled={status === "loading"}
+						className={cn(
+							"h-9 w-full rounded-lg border bg-fd-background px-3 text-sm",
+							"placeholder:text-fd-muted-foreground/60",
+							"focus:outline-none focus:ring-2 focus:ring-fd-primary/40",
+							"disabled:opacity-50",
+						)}
+					/>
 					<div className="flex gap-2">
 						<input
 							type="email"
@@ -124,21 +133,9 @@ export function SubscribeWidget({ className }: SubscribeWidgetProps) {
 	);
 }
 
-// ── Inline SVG icons (avoids adding a heavy icon dep) ─────────────────────────
-
 function BellIcon({ className }: { className?: string }) {
 	return (
-		<svg
-			xmlns="http://www.w3.org/2000/svg"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			strokeWidth="2"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-			className={className}
-			aria-hidden="true"
-		>
+		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
 			<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
 			<path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
 		</svg>
@@ -147,17 +144,7 @@ function BellIcon({ className }: { className?: string }) {
 
 function CheckIcon({ className }: { className?: string }) {
 	return (
-		<svg
-			xmlns="http://www.w3.org/2000/svg"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			strokeWidth="2.5"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-			className={className}
-			aria-hidden="true"
-		>
+		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
 			<path d="M20 6 9 17l-5-5" />
 		</svg>
 	);

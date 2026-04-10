@@ -1,5 +1,8 @@
 export type AuthProvider = "clerk" | "better-auth" | "workos";
 
+/** Frameworks the auth package can target. */
+export type AppFramework = "nextjs" | "vite" | "remix" | "expo";
+
 export interface AuthPackageOptions {
 	/** The chosen provider */
 	provider: AuthProvider;
@@ -11,26 +14,26 @@ export interface AuthPackageOptions {
 	scope: string;
 	/** The package manager in use */
 	pm: string;
+	/**
+	 * Frameworks detected across apps/ in the workspace.
+	 * Scaffolders use this to only install the packages actually needed.
+	 */
+	frameworks: AppFramework[];
 	/** If true, print what would happen but write nothing */
 	dryRun?: boolean;
 }
 
 /**
  * Everything a provider scaffolder must implement.
- *
- * The CLI calls scaffold() once — it creates the entire packages/auth
- * directory for that provider, including:
- *   - package.json
- *   - tsconfig.json
- *   - index.ts  (the public barrel)
- *   - <provider>-specific files
- *   - .env.example
- *   - README.md
  */
 export interface AuthPackageScaffolder {
 	/** Pretty label used in step output */
 	label: string;
-	/** npm deps that go into the auth package's package.json dependencies */
+	/**
+	 * npm deps that go into the auth package's package.json dependencies.
+	 * Scaffolders can use opts.frameworks to compute these dynamically —
+	 * this static field is for the base set always required.
+	 */
 	dependencies: Record<string, string>;
 	/** npm devDeps for the auth package */
 	devDependencies: Record<string, string>;

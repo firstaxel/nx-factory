@@ -1,6 +1,6 @@
 ---
 title: publish
-description: Build and publish the shared UI package.
+description: Build and publish the shared UI package to npm.
 ---
 
 ## Usage
@@ -15,12 +15,17 @@ nx-factory-cli publish --dry-run
 ## Options
 
 | Option | Description |
-| --- | --- |
+|---|---|
 | `--tag <tag>` | npm dist-tag (default: `latest`) |
-| `-y, --yes` | Skip prompts and use defaults |
-| `--dry-run` | Preview publish steps |
+| `-y, --yes` | Skip confirmation |
+| `--dry-run` | Preview steps without publishing |
 
-## What It Does
+## Requirements
 
-- Builds shared package artifacts
-- Publishes package with selected dist-tag
+The UI package must have `visibility: public` (no `private: true` in `package.json`). If you initialised the workspace with `internal` visibility, update it manually or re-run `nx-factory-cli migrate`.
+
+## What it does
+
+1. Runs `tsc -p tsconfig.json` to build `dist/`
+2. Confirms the `files` field is set to prevent publishing unnecessary files
+3. Runs `npm publish --tag <tag>` from inside `packages/ui`

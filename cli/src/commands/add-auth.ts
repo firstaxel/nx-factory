@@ -21,6 +21,7 @@ import {
 	writeAuthPackageBase,
 	type AuthProvider,
 	type AuthPackageScaffolder,
+	type AppFramework,
 } from "../setups/auth/index.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -32,8 +33,6 @@ interface AddAuthOptions {
 	yes?: boolean;
 	dryRun?: boolean;
 }
-
-type AppFramework = "nextjs" | "vite" | "remix" | "expo";
 
 interface AppTarget {
 	name: string;
@@ -230,16 +229,67 @@ async function wireApps(
 ): Promise<void> {
 	const { default: fs } = await import("fs-extra");
 	const protocol = pm === "npm" ? "*" : "workspace:*";
+	const authPkgName = scopedPackageName(scope, "auth");
+
 	for (const app of apps) {
 		const appName = app.name;
-		const pkgPath = path.join(root, "apps", appName, "package.json");
+		const appDir = path.join(root, "apps", appName);
+		const pkgPath = path.join(appDir, "package.json");
 		if (!(await pathExists(pkgPath))) continue;
+
+		// 1. Add the auth package to dependencies
 		const pkg = await fs.readJson(pkgPath);
 		pkg.dependencies = {
 			...pkg.dependencies,
-			[scopedPackageName(scope, "auth")]: protocol,
+			[authPkgName]: protocol,
 		};
 		await fs.writeJson(pkgPath, pkg, { spaces: 2 });
+
+		// 2. Inject the server-side import into the framework entry point
+		//    so developers can see exactly where to start using the package.
+		await injectAuthComment(appDir, app.framework, authPkgName, fs);
+	}
+}
+
+/**
+ * Injects a commented import hint into the framework's root entry file
+ * so developers know exactly where to wire up the auth package.
+ */
+async function injectAuthComment(
+	appDir: string,
+	framework: AppFramework,
+	authPkgName: string,
+	fs: typeof import("fs-extra"),
+): Promise<void> {
+	const COMMENT = `// Auth: import from "${authPkgName}/server" or "${authPkgName}/client"\n`;
+
+	const candidates: string[] = [];
+	switch (framework) {
+		case "nextjs":
+			candidates.push(
+				"src/app/layout.tsx",
+				"src/app/layout.jsx",
+				"app/layout.tsx",
+			);
+			break;
+		case "remix":
+			candidates.push("app/root.tsx", "app/root.jsx");
+			break;
+		case "vite":
+			candidates.push("src/main.tsx", "src/main.jsx", "src/App.tsx");
+			break;
+		case "expo":
+			candidates.push("app/_layout.tsx", "App.tsx");
+			break;
+	}
+
+	for (const rel of candidates) {
+		const filePath = path.join(appDir, rel);
+		if (!(await pathExists(filePath))) continue;
+		const existing = await fs.readFile(filePath, "utf-8");
+		if (existing.includes(authPkgName)) break; // already wired
+		await fs.writeFile(filePath, COMMENT + existing, "utf-8");
+		break;
 	}
 }
 
@@ -376,7 +426,10 @@ export async function addAuthCommand(options: AddAuthOptions): Promise<void> {
 		printSection(`[dry run] Creating packages/auth — ${scaffolder.label}`);
 		const step = createStepRunner(4, true);
 		await step("Write package.json and tsconfig.json", async () => {});
-		await step(`Scaffold ${scaffolder.label} ./files`, async () => {});
+		await step(
+			`Scaffold ${scaffolder.label} source files (frameworks: ${[...new Set(apps.map((a) => a.framework))].join(", ") || "none detected"})`,
+			async () => {},
+		);
 		await step("Install provider npm packages", async () => {});
 		await step(
 			selectedTargets.length > 0
@@ -413,6 +466,7 @@ export async function addAuthCommand(options: AddAuthOptions): Promise<void> {
 			workspaceName: cfg?.workspaceName ?? "workspace",
 			scope,
 			pm,
+			frameworks: [...new Set(apps.map((a) => a.framework))],
 		});
 	});
 

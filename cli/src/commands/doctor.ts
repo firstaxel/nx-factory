@@ -243,7 +243,7 @@ export async function doctorCommand(): Promise<void> {
 	} else {
 		// Auto-fix: append missing exports
 		const newLines = missing
-			.map((c) => `export * from "./components/ui/${c}";`)
+			.map((c) => `export * from "./components/ui/${c}.js";`)
 			.join("\n");
 		const updated = barrelContent.endsWith("\n")
 			? barrelContent + newLines + "\n"

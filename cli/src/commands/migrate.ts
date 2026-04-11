@@ -7,7 +7,7 @@ import {
 	type NxShadcnConfig,
 	type PackageVisibility,
 } from "../config.js";
-import { detectPackageManager } from "../exec.js";
+import { detectPackageManager, pmWorkspaceProtocol } from "../exec.js";
 import { pathExists, writeJson } from "../files.js";
 import {
 	MonorepoRootNotFoundError,
@@ -40,11 +40,15 @@ interface MigrationStatus {
 	hasConfig: boolean;
 	configVersion: string | null;
 	hasTsConfigBase: boolean;
-	hasTypescriptPackage: boolean;
+	hasToolingTypescriptPackage: boolean;
+	hasLegacyTypescriptPackage: boolean;
+	hasRootToolingWorkspaceEntry: boolean;
 	hasUiPackageVisibility: boolean;
 	uiPackageDir: string | null;
 	appsWithBadTsConfig: string[];
 	packagesWithBadTsConfig: string[];
+	projectsMissingTypescriptToolingDep: string[];
+	publicPackagesEligibleForInternalization: string[];
 	/** Internal source packages whose .ts files have .js extensions on relative imports */
 	internalPackagesWithJsExtensions: string[];
 	/** Count of *.migration-backup files in the workspace */
@@ -104,6 +108,8 @@ export async function migrateCommand(options: MigrateOptions): Promise<void> {
 	const answers = options.yes
 		? {
 				proceed: true,
+				migrateTypescriptTooling: true,
+				packagesToMakeInternal: [] as string[],
 				uiVisibility: "internal" as PackageVisibility,
 				removeJsExtensions: false,
 				cleanupBackups: false,
@@ -117,6 +123,30 @@ export async function migrateCommand(options: MigrateOptions): Promise<void> {
 						"a backup of each changed file will be written as <file>.migration-backup",
 					),
 					default: true,
+				},
+				{
+					type: "confirm",
+					name: "migrateTypescriptTooling",
+					message: q(
+						"Migrate TypeScript tooling package?",
+						"move packages/typescript to tooling/typescript and refresh tsconfig presets",
+					),
+					default: true,
+					when:
+						!status.hasToolingTypescriptPackage ||
+						status.hasLegacyTypescriptPackage,
+				},
+				{
+					type: "checkbox",
+					name: "packagesToMakeInternal",
+					message: q(
+						"Select packages to make internal",
+						"selected packages will get private:true in package.json",
+					),
+					choices: status.publicPackagesEligibleForInternalization.map(
+						(pkgName) => ({ name: pkgName, value: pkgName }),
+					),
+					when: status.publicPackagesEligibleForInternalization.length > 0,
 				},
 				{
 					type: "select",
@@ -164,6 +194,11 @@ export async function migrateCommand(options: MigrateOptions): Promise<void> {
 
 	const uiVisibility = (answers.uiVisibility ??
 		"internal") as PackageVisibility;
+	const shouldMigrateTypescriptTooling =
+		((answers.migrateTypescriptTooling as boolean | undefined) ?? true) &&
+		(!status.hasToolingTypescriptPackage || status.hasLegacyTypescriptPackage);
+	const packagesToMakeInternal =
+		(answers.packagesToMakeInternal as string[] | undefined) ?? [];
 	const removeJsExtensions =
 		(answers.removeJsExtensions as boolean | undefined) ?? false;
 	const cleanupBackupsNow = options.yes
@@ -173,7 +208,10 @@ export async function migrateCommand(options: MigrateOptions): Promise<void> {
 	// ── Count steps dynamically ───────────────────────────────────────────────
 	let totalSteps = 0;
 	if (!status.hasTsConfigBase) totalSteps++;
-	if (!status.hasTypescriptPackage) totalSteps++;
+	if (shouldMigrateTypescriptTooling) totalSteps++;
+	if (!status.hasRootToolingWorkspaceEntry) totalSteps++;
+	if (status.projectsMissingTypescriptToolingDep.length > 0) totalSteps++;
+	if (packagesToMakeInternal.length > 0) totalSteps++;
 	if (!status.hasUiPackageVisibility && status.uiPackageDir) totalSteps++;
 	if (status.packagesWithBadTsConfig.length > 0) totalSteps++;
 	if (status.appsWithBadTsConfig.length > 0) totalSteps++;
@@ -198,21 +236,48 @@ export async function migrateCommand(options: MigrateOptions): Promise<void> {
 		});
 	}
 
-	// ── Step 1b: Scaffold packages/typescript ───────────────────────────────
-	if (!status.hasTypescriptPackage) {
-		await step("Scaffold packages/typescript workspace package", async () => {
-			const { default: fs } = await import("fs-extra");
-			const pkgDir = path.join(root, "tooling", "typescript");
-			await fs.ensureDir(pkgDir);
-			await writeJson(
-				path.join(pkgDir, "package.json"),
-				typescriptPackageJson(scope),
-			);
-			const presets = typescriptPresets();
-			for (const [filename, content] of Object.entries(presets)) {
-				await writeJson(path.join(pkgDir, filename), content);
-			}
+	// ── Step 1b: Migrate tooling/typescript package ─────────────────────────
+	if (shouldMigrateTypescriptTooling) {
+		await step("Migrate tooling/typescript workspace package", async () => {
+			await migrateTypescriptToolingPackage(root, scope);
 		});
+	}
+
+	// ── Step 1c: Ensure tooling/* is included in root workspaces ────────────
+	if (!status.hasRootToolingWorkspaceEntry) {
+		await step('Add "tooling/*" to root package.json workspaces', async () => {
+			await ensureRootToolingWorkspaceEntry(root);
+		});
+	}
+
+	// ── Step 1d: Ensure @scope/typescript is wired into project package.json ─
+	if (status.projectsMissingTypescriptToolingDep.length > 0) {
+		await step(
+			`Add TypeScript tooling dependency to ${status.projectsMissingTypescriptToolingDep.length} package.json file(s)`,
+			async () => {
+				await ensureTypescriptToolingDeps(
+					root,
+					scope,
+					pm,
+					status.projectsMissingTypescriptToolingDep,
+					options.dryRun,
+				);
+			},
+		);
+	}
+
+	// ── Step 1e: Make selected public packages internal ──────────────────────
+	if (packagesToMakeInternal.length > 0) {
+		await step(
+			`Make ${packagesToMakeInternal.length} package(s) internal`,
+			async () => {
+				await makePackagesInternal(
+					root,
+					packagesToMakeInternal,
+					options.dryRun,
+				);
+			},
+		);
 	}
 
 	// ── Step 2: Migrate UI package tsconfig + package.json ──────────────────
@@ -461,12 +526,17 @@ async function analyseWorkspace(root: string): Promise<MigrationStatus> {
 	const { default: fs } = await import("fs-extra");
 
 	const cfg = await loadConfig();
+	const scope = resolveScope(cfg);
 	const hasTsConfigBase = await pathExists(
 		path.join(root, "tsconfig.base.json"),
 	);
-	const hasTypescriptPackage = await pathExists(
+	const hasToolingTypescriptPackage = await pathExists(
+		path.join(root, "tooling", "typescript", "tsconfig.internal.json"),
+	);
+	const hasLegacyTypescriptPackage = await pathExists(
 		path.join(root, "packages", "typescript", "tsconfig.internal.json"),
 	);
+	const hasRootToolingWorkspaceEntry = await hasToolingWorkspaceEntry(root);
 
 	// Find UI package
 	let uiPackageDir: string | null = null;
@@ -568,16 +638,24 @@ async function analyseWorkspace(root: string): Promise<MigrationStatus> {
 
 	// Count existing backup files
 	const backupFileCount = await countBackupFiles(root);
+	const projectsMissingTypescriptToolingDep =
+		await listProjectsMissingToolingTypescriptDependency(root, scope);
+	const publicPackagesEligibleForInternalization =
+		await listPublicPackagesEligibleForInternalization(root, uiPackageDir);
 
 	return {
 		hasConfig: !!cfg,
 		configVersion: cfg?.version ?? null,
 		hasTsConfigBase,
-		hasTypescriptPackage,
+		hasToolingTypescriptPackage,
+		hasLegacyTypescriptPackage,
+		hasRootToolingWorkspaceEntry,
 		hasUiPackageVisibility: !!cfg?.uiPackageVisibility,
 		uiPackageDir,
 		appsWithBadTsConfig,
 		packagesWithBadTsConfig,
+		projectsMissingTypescriptToolingDep,
+		publicPackagesEligibleForInternalization,
 		internalPackagesWithJsExtensions,
 		backupFileCount,
 	};
@@ -587,10 +665,14 @@ function isFullyMigrated(s: MigrationStatus): boolean {
 	return (
 		s.hasConfig &&
 		s.hasTsConfigBase &&
-		s.hasTypescriptPackage &&
+		s.hasToolingTypescriptPackage &&
+		!s.hasLegacyTypescriptPackage &&
+		s.hasRootToolingWorkspaceEntry &&
 		s.hasUiPackageVisibility &&
+		s.publicPackagesEligibleForInternalization.length === 0 &&
 		s.appsWithBadTsConfig.length === 0 &&
 		s.packagesWithBadTsConfig.length === 0 &&
+		s.projectsMissingTypescriptToolingDep.length === 0 &&
 		s.internalPackagesWithJsExtensions.length === 0 &&
 		s.backupFileCount === 0
 	);
@@ -608,8 +690,30 @@ function printAnalysis(s: MigrationStatus): void {
 		`  ${s.hasTsConfigBase ? tick : cross}  tsconfig.base.json ${s.hasTsConfigBase ? "" : c.yellow("missing — will create")}`,
 	);
 	console.log(
-		`  ${s.hasTypescriptPackage ? tick : cross}  packages/typescript presets ${s.hasTypescriptPackage ? "" : c.yellow("missing — will create")}`,
+		`  ${s.hasToolingTypescriptPackage ? tick : cross}  tooling/typescript presets ${s.hasToolingTypescriptPackage ? "" : c.yellow("missing — will migrate")}`,
 	);
+	if (s.hasLegacyTypescriptPackage) {
+		console.log(
+			`  ${cross}  legacy packages/typescript detected ${c.yellow("will migrate to tooling/typescript")}`,
+		);
+	}
+	console.log(
+		`  ${s.hasRootToolingWorkspaceEntry ? tick : cross}  root package.json workspaces include tooling/* ${s.hasRootToolingWorkspaceEntry ? "" : c.yellow("missing — will add")}`,
+	);
+	if (s.projectsMissingTypescriptToolingDep.length > 0) {
+		console.log(
+			`  ${cross}  package.json files missing @scope/typescript dep: ${c.yellow(s.projectsMissingTypescriptToolingDep.join(", "))}`,
+		);
+	} else {
+		console.log(
+			`  ${tick}  @scope/typescript dependency is present where needed`,
+		);
+	}
+	if (s.publicPackagesEligibleForInternalization.length > 0) {
+		console.log(
+			`  ${c.dim("○")}  Public packages available to make internal: ${c.yellow(s.publicPackagesEligibleForInternalization.join(", "))}`,
+		);
+	}
 	console.log(
 		`  ${s.hasUiPackageVisibility ? tick : cross}  UI package visibility ${s.hasUiPackageVisibility ? "" : c.yellow("not set — will prompt")}`,
 	);
@@ -642,6 +746,224 @@ function printAnalysis(s: MigrationStatus): void {
 		);
 	}
 	console.log();
+}
+
+async function migrateTypescriptToolingPackage(
+	root: string,
+	scope: string,
+): Promise<void> {
+	const { default: fs } = await import("fs-extra");
+	const legacyDir = path.join(root, "packages", "typescript");
+	const toolingDir = path.join(root, "tooling", "typescript");
+	const legacyExists = await pathExists(legacyDir);
+	const toolingExists = await pathExists(toolingDir);
+
+	if (legacyExists && !toolingExists) {
+		await fs.ensureDir(path.join(root, "tooling"));
+		await fs.move(legacyDir, toolingDir, { overwrite: false });
+	}
+
+	if (legacyExists && toolingExists) {
+		const backupDir = path.join(
+			root,
+			".migration-backups",
+			"packages-typescript",
+		);
+		await fs.ensureDir(path.dirname(backupDir));
+		await fs.copy(legacyDir, backupDir, { overwrite: true });
+		await fs.remove(legacyDir);
+	}
+
+	await fs.ensureDir(toolingDir);
+	await writeJson(
+		path.join(toolingDir, "package.json"),
+		typescriptPackageJson(scope),
+	);
+	const presets = typescriptPresets();
+	for (const [filename, content] of Object.entries(presets)) {
+		await writeJson(path.join(toolingDir, filename), content);
+	}
+}
+
+async function hasToolingWorkspaceEntry(root: string): Promise<boolean> {
+	const { default: fs } = await import("fs-extra");
+	const pkgPath = path.join(root, "package.json");
+	if (!(await pathExists(pkgPath))) return false;
+
+	try {
+		const pkgJson = (await fs.readJson(pkgPath)) as {
+			workspaces?: string[] | { packages?: string[] };
+		};
+		if (Array.isArray(pkgJson.workspaces)) {
+			return pkgJson.workspaces.includes("tooling/*");
+		}
+		if (pkgJson.workspaces && Array.isArray(pkgJson.workspaces.packages)) {
+			return pkgJson.workspaces.packages.includes("tooling/*");
+		}
+		return false;
+	} catch {
+		return false;
+	}
+}
+
+async function ensureRootToolingWorkspaceEntry(root: string): Promise<void> {
+	const { default: fs } = await import("fs-extra");
+	const pkgPath = path.join(root, "package.json");
+	if (!(await pathExists(pkgPath))) return;
+
+	const pkgJson = (await fs.readJson(pkgPath)) as {
+		workspaces?: string[] | { packages?: string[] };
+	};
+	if (Array.isArray(pkgJson.workspaces)) {
+		pkgJson.workspaces = Array.from(
+			new Set([...pkgJson.workspaces, "tooling/*"]),
+		);
+	} else if (pkgJson.workspaces && Array.isArray(pkgJson.workspaces.packages)) {
+		pkgJson.workspaces.packages = Array.from(
+			new Set([...pkgJson.workspaces.packages, "tooling/*"]),
+		);
+	} else {
+		pkgJson.workspaces = ["packages/*", "apps/*", "tooling/*"];
+	}
+
+	await fs.writeJson(pkgPath, pkgJson, { spaces: 2 });
+}
+
+async function listProjectsMissingToolingTypescriptDependency(
+	root: string,
+	scope: string,
+): Promise<string[]> {
+	const { default: fs } = await import("fs-extra");
+	const projectDirs = ["packages", "apps"];
+	const tsPkgName = `@${scope}/typescript`;
+	const missing: string[] = [];
+
+	for (const parent of projectDirs) {
+		const parentDir = path.join(root, parent);
+		if (!(await pathExists(parentDir))) continue;
+		const entries = await fs.readdir(parentDir, { withFileTypes: true });
+
+		for (const entry of entries) {
+			if (!entry.isDirectory()) continue;
+			const projectDir = path.join(parentDir, entry.name);
+			const tsConfigPath = path.join(projectDir, "tsconfig.json");
+			const pkgJsonPath = path.join(projectDir, "package.json");
+			if (
+				!(await pathExists(tsConfigPath)) ||
+				!(await pathExists(pkgJsonPath))
+			) {
+				continue;
+			}
+
+			try {
+				const tsConfig = (await fs.readJson(tsConfigPath)) as {
+					extends?: unknown;
+				};
+				const extendsValue = String(tsConfig.extends ?? "");
+				if (!extendsValue.startsWith(`${tsPkgName}/`)) continue;
+
+				const pkgJson = (await fs.readJson(pkgJsonPath)) as {
+					dependencies?: Record<string, string>;
+					devDependencies?: Record<string, string>;
+					peerDependencies?: Record<string, string>;
+					optionalDependencies?: Record<string, string>;
+				};
+
+				const hasDep =
+					!!pkgJson.dependencies?.[tsPkgName] ||
+					!!pkgJson.devDependencies?.[tsPkgName] ||
+					!!pkgJson.peerDependencies?.[tsPkgName] ||
+					!!pkgJson.optionalDependencies?.[tsPkgName];
+
+				if (!hasDep) missing.push(`${parent}/${entry.name}`);
+			} catch {
+				continue;
+			}
+		}
+	}
+
+	return missing.sort();
+}
+
+async function ensureTypescriptToolingDeps(
+	root: string,
+	scope: string,
+	pm: string,
+	projectPaths: string[],
+	dryRun?: boolean,
+): Promise<void> {
+	const { default: fs } = await import("fs-extra");
+	const tsPkgName = `@${scope}/typescript`;
+	const protocol = pmWorkspaceProtocol(pm);
+
+	for (const projectPath of projectPaths) {
+		const pkgJsonPath = path.join(root, projectPath, "package.json");
+		if (!(await pathExists(pkgJsonPath))) continue;
+		await backupIfExists(pkgJsonPath, dryRun);
+
+		const pkgJson = (await fs.readJson(pkgJsonPath)) as {
+			devDependencies?: Record<string, string>;
+		};
+		pkgJson.devDependencies = {
+			...(pkgJson.devDependencies ?? {}),
+			[tsPkgName]: protocol,
+		};
+		await fs.writeJson(pkgJsonPath, pkgJson, { spaces: 2 });
+	}
+}
+
+async function listPublicPackagesEligibleForInternalization(
+	root: string,
+	uiPackageDir: string | null,
+): Promise<string[]> {
+	const { default: fs } = await import("fs-extra");
+	const packagesDir = path.join(root, "packages");
+	if (!(await pathExists(packagesDir))) return [];
+
+	const uiPkgName = uiPackageDir ? path.basename(uiPackageDir) : null;
+	const entries = await fs.readdir(packagesDir, { withFileTypes: true });
+	const publicPackages: string[] = [];
+
+	for (const entry of entries) {
+		if (!entry.isDirectory()) continue;
+		if (entry.name === "typescript") continue;
+		if (uiPkgName && entry.name === uiPkgName) continue;
+
+		const pkgPath = path.join(packagesDir, entry.name, "package.json");
+		if (!(await pathExists(pkgPath))) continue;
+
+		try {
+			const pkgJson = (await fs.readJson(pkgPath)) as {
+				private?: unknown;
+			};
+			if (!pkgJson.private) {
+				publicPackages.push(entry.name);
+			}
+		} catch {
+			continue;
+		}
+	}
+
+	return publicPackages.sort();
+}
+
+async function makePackagesInternal(
+	root: string,
+	packageNames: string[],
+	dryRun?: boolean,
+): Promise<void> {
+	const { default: fs } = await import("fs-extra");
+
+	for (const pkgName of packageNames) {
+		const pkgPath = path.join(root, "packages", pkgName, "package.json");
+		if (!(await pathExists(pkgPath))) continue;
+		await backupIfExists(pkgPath, dryRun);
+
+		const pkgJson = (await fs.readJson(pkgPath)) as Record<string, unknown>;
+		pkgJson.private = true;
+		delete pkgJson.publishConfig;
+		await fs.writeJson(pkgPath, pkgJson, { spaces: 2 });
+	}
 }
 
 async function detectFrameworkFromAppDir(

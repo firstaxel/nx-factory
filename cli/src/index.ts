@@ -1,19 +1,19 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { printBanner } from "./ui.js";
-import { initCommand } from "./commands/init.js";
+import { createRequire } from "node:module";
 import { addAppCommand } from "./commands/add-app.js";
+import { addAuthCommand } from "./commands/add-auth.js";
 import { addComponentCommand } from "./commands/add-component.js";
-import { removeComponentCommand } from "./commands/remove-component.js";
-import { updateCommand } from "./commands/update.js";
-import { listCommand } from "./commands/list.js";
-import { doctorCommand } from "./commands/doctor.js";
 import { addLibCommand } from "./commands/add-lib.js";
 import { addStorybookCommand } from "./commands/add-storybook.js";
+import { doctorCommand } from "./commands/doctor.js";
+import { initCommand } from "./commands/init.js";
+import { listCommand } from "./commands/list.js";
+import { cleanupMigrationBackups, migrateCommand } from "./commands/migrate.js";
 import { publishCommand } from "./commands/publish.js";
-import { addAuthCommand } from "./commands/add-auth.js";
-import { migrateCommand } from "./commands/migrate.js";
-import { createRequire } from "module";
+import { removeComponentCommand } from "./commands/remove-component.js";
+import { updateCommand } from "./commands/update.js";
+import { printBanner } from "./ui.js";
 
 const _require = createRequire(import.meta.url);
 const _pkg = _require("../package.json") as { version: string };
@@ -134,9 +134,60 @@ program
 
 program
 	.command("migrate")
-	.description("Migrate an existing nx-factory-cli workspace to the latest configuration")
+	.description(
+		"Migrate an existing nx-factory-cli workspace to the latest configuration",
+	)
 	.option("-y, --yes", "Skip confirmation prompts")
 	.option("--dry-run", "Preview what would be changed without writing anything")
 	.action(migrateCommand);
+
+program
+	.command("cleanup-backups")
+	.description(
+		"Delete all .migration-backup files left by a previous migrate run",
+	)
+	.option(
+		"--dry-run",
+		"Preview which files would be deleted without deleting them",
+	)
+	.action(async (opts: { dryRun?: boolean }) => {
+		const { requireMonorepoRoot, MonorepoRootNotFoundError } = await import(
+			"./resolve-root.js"
+		);
+		const { printError, printSuccess, c } = await import("./ui.js");
+		let root: string;
+		try {
+			root = await requireMonorepoRoot();
+		} catch (err) {
+			if (err instanceof MonorepoRootNotFoundError) {
+				printError({
+					title: "Could not find workspace root",
+					detail: String(err),
+					recovery: [{ label: "", cmd: "cd <workspace-root>" }],
+				});
+			} else {
+				printError({
+					title: "Unexpected error",
+					detail: String(err),
+					recovery: [],
+				});
+			}
+			process.exit(1);
+		}
+		const count = await cleanupMigrationBackups(root, opts.dryRun);
+		if (count === 0) {
+			console.log(`\n  ${c.green("✓")}  No .migration-backup files found.\n`);
+		} else if (opts.dryRun) {
+			console.log(
+				`\n  ${c.dim("○")}  Would delete ${count} .migration-backup file(s). Run without --dry-run to apply.\n`,
+			);
+		} else {
+			printSuccess({
+				title: `Deleted ${count} .migration-backup file(s)`,
+				commands: [],
+				tips: [],
+			});
+		}
+	});
 
 program.parse();

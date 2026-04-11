@@ -199,6 +199,9 @@ export async function addAppCommand(options: AddAppOptions): Promise<void> {
 		await patchConfig(framework, appDir, uiPkgName, scope);
 	});
 
+	// Update the root solution tsconfig.json to reference the new app
+	await updateRootSolution(workspaceRoot);
+
 	printSuccess({
 		title: `apps/${appName} created`,
 		commands: [
@@ -221,6 +224,33 @@ export async function addAppCommand(options: AddAppOptions): Promise<void> {
 				: []),
 		],
 	});
+}
+
+/** Keeps the root solution tsconfig.json in sync after adding a package or app. */
+async function updateRootSolution(workspaceRoot: string): Promise<void> {
+	const { default: fs } = await import("fs-extra");
+	const solutionPath = path.join(workspaceRoot, "tsconfig.json");
+	if (!(await pathExists(solutionPath))) return;
+	try {
+		const solution = await fs.readJson(solutionPath) as {
+			files?: string[];
+			references?: Array<{ path: string }>;
+		};
+		// Re-read actual directories to build a fresh reference list
+		const refs: Array<{ path: string }> = [];
+		for (const dir of ["packages", "apps"]) {
+			const fullDir = path.join(workspaceRoot, dir);
+			if (!(await pathExists(fullDir))) continue;
+			const entries = await fs.readdir(fullDir);
+			for (const e of entries) {
+				const hasTsCfg = await pathExists(path.join(fullDir, e, "tsconfig.json"));
+				if (hasTsCfg) refs.push({ path: `./${dir}/${e}` });
+			}
+		}
+		solution.files = [];
+		solution.references = refs;
+		await fs.writeJson(solutionPath, solution, { spaces: 2 });
+	} catch { /* non-fatal — solution file will be slightly stale */ }
 }
 
 // ─── CLI runner ───────────────────────────────────────────────────────────────
@@ -511,11 +541,9 @@ module.exports = {
 }
 
 /**
- * Rewrites an app's tsconfig.json to:
- *  - extend ../../tsconfig.base.json (inherits paths, strict, target)
- *  - add framework-specific compiler options (jsx, lib, plugins)
- *  - set the correct @/* alias (src/* or root)
- *  - NOT pollute include with packages/**\/* (paths handles resolution)
+ * Rewrites an app's tsconfig.json to extend the correct tooling/ preset.
+ * Falls back to ../../tsconfig.base.json if tooling/ doesn't exist yet
+ * (pre-migration workspaces). Run `nx-factory-cli migrate` to add tooling/.
  */
 async function patchAppTsConfig(
 	appDir: string,
@@ -531,10 +559,12 @@ async function patchAppTsConfig(
 		? framework
 		: "vite") as "nextjs" | "vite" | "remix" | "expo";
 
-	const generated = appTsConfig({ scope, framework: fw, hasSrcDir });
+	// Check if packages/typescript/ exists — it does in workspaces created with
+	// the current CLI. Older workspaces should run `nx-factory-cli migrate` first.
+	const workspaceRoot = path.resolve(appDir, "../..");
+	const toolingExists = await pathExists(path.join(workspaceRoot, "packages", "typescript", "tsconfig.internal.json"));
+	const generated = appTsConfig({ scope, framework: fw, hasSrcDir, typescriptPkgExists: toolingExists });
 
-	// Merge: keep framework-generated keys (e.g. Next.js writes next-env.d.ts
-	// references), but override extends, paths, and include with our values.
 	const existing = await fs.readJson(tsConfigPath);
 	const merged = {
 		...existing,

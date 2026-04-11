@@ -3,8 +3,20 @@ import path from "path";
 import { createRequire } from "module";
 import { run, runInDir, pmAdd, pmx, pmxArgs } from "../exec.js";
 import { writeJson, writeFile, ensureDir, pathExists } from "../files.js";
-import { saveConfig, normalizeScope, scopedPackageName, type PackageVisibility } from "../config.js";
-import { rootTsConfigBase, packageTsConfig, appTsConfig } from "../tsconfigs.js";
+import {
+	saveConfig,
+	normalizeScope,
+	scopedPackageName,
+	type PackageVisibility,
+} from "../config.js";
+import {
+	rootTsConfigBase,
+	typescriptPackageJson,
+	typescriptPresets,
+	packageTsConfig,
+	appTsConfig,
+	rootTsConfigSolution,
+} from "../tsconfigs.js";
 import { scaffoldExampleApp } from "./add-app.js";
 import {
 	c,
@@ -25,7 +37,7 @@ interface InitOptions {
 	dryRun?: boolean;
 }
 
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 9;
 const SUPPORTED_PACKAGE_MANAGERS = ["pnpm", "npm", "yarn", "bun"] as const;
 
 function isSupportedPackageManager(
@@ -157,7 +169,8 @@ export async function initCommand(options: InitOptions): Promise<void> {
 	const workspaceName = answers.workspaceName as string;
 	const scope = normalizeScope(workspaceName);
 	const uiPkgName = answers.uiPackageName as string;
-	const uiPackageVisibility = (answers.uiPackageVisibility ?? defaults.uiPackageVisibility) as PackageVisibility;
+	const uiPackageVisibility = (answers.uiPackageVisibility ??
+		defaults.uiPackageVisibility) as PackageVisibility;
 	const baseColor = (answers.baseColor ?? "neutral") as string;
 	const initialComponents = answers.initialComponents as string[];
 	const addExampleApp = answers.addExampleApp as boolean;
@@ -227,6 +240,10 @@ export async function initCommand(options: InitOptions): Promise<void> {
 	}
 
 	await step("Update nx.json", () => updateNxJson(cwd));
+
+	await step("Scaffold packages/typescript workspace package", () =>
+		writeTypescriptPackage(cwd, scope),
+	);
 
 	if (addExampleApp) {
 		await step("Scaffold example Next.js app", () =>
@@ -345,7 +362,7 @@ async function scaffoldUiPackage(
 			? {
 					files: ["dist", "styles"],
 					publishConfig: { access: "public" },
-			  }
+				}
 			: {}),
 		peerDependencies: {
 			react: "^18 || ^19",
@@ -811,7 +828,7 @@ async function updatePackageJson(cwd: string): Promise<void> {
 	if (!(await pathExists(pkgJsonPath))) return;
 	const pkgJson = await fs.readJson(pkgJsonPath);
 
-	const required = ["packages/*", "apps/*"];
+	const required = ["packages/*", "apps/*", "tooling/*"];
 	if (Array.isArray(pkgJson.workspaces)) {
 		pkgJson.workspaces = Array.from(
 			new Set([...pkgJson.workspaces, ...required]),
@@ -828,21 +845,45 @@ async function updatePackageJson(cwd: string): Promise<void> {
 }
 
 /**
- * Writes tsconfig.base.json at the workspace root and patches the
- * example app's tsconfig to extend it.
- * All package and app tsconfigs extend this base.
+ * Writes tsconfig.base.json at the workspace root and the root solution
+ * tsconfig.json. Also patches the example app's tsconfig if it was scaffolded.
  */
 async function updateTsConfig(cwd: string, scope: string): Promise<void> {
 	const { default: fs } = await import("fs-extra");
 
-	// ── 1. Write root tsconfig.base.json ──────────────────────────────────────
+	// ── 1. Root tsconfig.base.json ────────────────────────────────────────────
 	await writeJson(
 		path.join(cwd, "tsconfig.base.json"),
 		rootTsConfigBase(scope),
 	);
 
-	// ── 2. Patch the example app tsconfig (if it was scaffolded) ─────────────
-	// Try both with and without src/ dir
+	// ── 2. Root solution tsconfig.json ───────────────────────────────────────
+	// A solution file that references all packages and apps so IDEs and
+	// `tsc --build` can see the whole workspace in one pass.
+	const pkgNames: string[] = [];
+	const appNames: string[] = [];
+	try {
+		const pkgDir = path.join(cwd, "packages");
+		if (await pathExists(pkgDir)) {
+			pkgNames.push(...(await fs.readdir(pkgDir)));
+		}
+	} catch {
+		/* packages/ not created yet */
+	}
+	try {
+		const appsDir = path.join(cwd, "apps");
+		if (await pathExists(appsDir)) {
+			appNames.push(...(await fs.readdir(appsDir)));
+		}
+	} catch {
+		/* apps/ not created yet */
+	}
+	await writeJson(
+		path.join(cwd, "tsconfig.json"),
+		rootTsConfigSolution(pkgNames, appNames),
+	);
+
+	// ── 3. Patch the example app tsconfig (if it was scaffolded) ─────────────
 	for (const appTsConfigRel of [
 		"apps/example-app/tsconfig.json",
 		"apps/example-app/tsconfig.app.json",
@@ -853,8 +894,6 @@ async function updateTsConfig(cwd: string, scope: string): Promise<void> {
 		const hasSrcDir = await pathExists(path.join(cwd, "apps/example-app/src"));
 		const generated = appTsConfig({ scope, framework: "nextjs", hasSrcDir });
 
-		// Merge: keep any framework-generated keys the factory doesn't know about,
-		// but always overwrite extends, compilerOptions.paths, and include.
 		const existing = await fs.readJson(tsConfigPath);
 		const merged = {
 			...existing,
@@ -866,5 +905,28 @@ async function updateTsConfig(cwd: string, scope: string): Promise<void> {
 		};
 		await fs.writeJson(tsConfigPath, merged, { spaces: 2 });
 		break;
+	}
+}
+
+/**
+ * Scaffolds the packages/typescript workspace package.
+ * This is a private, never-built package that owns all shared tsconfig presets.
+ * Other packages extend from "@scope/typescript/tsconfig.*.json".
+ */
+async function writeTypescriptPackage(
+	cwd: string,
+	scope: string,
+): Promise<void> {
+	const pkgDir = path.join(cwd, "tooling", "typescript");
+	await ensureDir(pkgDir);
+	// package.json — makes it a proper workspace package
+	await writeJson(
+		path.join(pkgDir, "package.json"),
+		typescriptPackageJson(scope),
+	);
+	// tsconfig presets
+	const presets = typescriptPresets();
+	for (const [filename, content] of Object.entries(presets)) {
+		await writeJson(path.join(pkgDir, filename), content);
 	}
 }

@@ -1,202 +1,352 @@
 /**
- * tsconfigs.ts — single source of truth for every tsconfig shape the CLI writes.
+ * tsconfigs.ts — single source of truth for every tsconfig file the CLI writes.
  *
- * Rules that govern the choices below:
+ * ── Architecture of the generated workspace ───────────────────────────────────
  *
- * ROOT tsconfig.base.json
- *   "module": "NodeNext" / "moduleResolution": "NodeNext"
- *   — the CLI itself uses NodeNext, and apps compiled by Next.js / tsc directly
- *     also use NodeNext. All relative imports in source must end with .js.
- *   — baseUrl + paths live here so every package and app inherits them without
- *     repeating the mapping.
+ * The CLI scaffolds a `packages/typescript` workspace package at init time.
+ * It is a private, never-built package whose only purpose is to own and
+ * distribute the shared tsconfig presets for the whole monorepo.
  *
- * PACKAGE tsconfig.json (internal or public)
- *   Extends ../../tsconfig.base.json — inherits paths, strict, target.
- *   Overrides only what the package specifically needs (jsx, lib, outDir).
+ *   my-monorepo/
+ *   ├── tsconfig.base.json               ← strict settings + global paths (no module/resolution)
+ *   ├── tsconfig.json                    ← solution file: references all packages + apps
+ *   └── packages/
+ *       └── typescript/                  ← workspace package: @scope/typescript
+ *           ├── package.json             ← private: true, exports all tsconfig files
+ *           ├── tsconfig.base.json       ← re-exports root base (one hop)
+ *           ├── tsconfig.internal.json   ← ESNext + Bundler, noEmit — for source-only packages
+ *           ├── tsconfig.package.json    ← NodeNext + NodeNext, composite — for published packages
+ *           ├── tsconfig.nextjs.json     ← ESNext + Bundler, jsx:preserve, Next.js plugin
+ *           ├── tsconfig.vite.json       ← ESNext + Bundler, jsx:react-jsx
+ *           ├── tsconfig.remix.json      ← ESNext + Bundler, jsx:react-jsx
+ *           └── tsconfig.expo.json       ← ESNext + Bundler, jsx:react-native
  *
- *   Internal  (private: true in package.json)
- *     — no `declaration` / `declarationMap` needed in theory, but we keep them
- *       so IDEs get go-to-definition inside the monorepo.
- *     — composite: true + incremental for fast Nx caching.
+ * Packages and apps extend like this:
  *
- *   Public  (to be published to npm)
- *     — declaration + declarationMap required by consumers.
- *     — composite: true for project references.
- *     — stripInternal: true so @internal JSDoc strips from .d.ts.
- *     — no `rootDir` override needed because extend covers it.
+ *   packages/ui/tsconfig.json:
+ *     { "extends": "@scope/typescript/tsconfig.internal.json" }
  *
- * APP tsconfig.json
- *   Extends ../../tsconfig.base.json.
- *   Each framework adds its own lib / jsx overrides.
- *   No packages/**\/* in `include` — paths handles resolution, and polluting
- *   include causes duplicate type-checking and false errors.
+ *   apps/dashboard/tsconfig.json:
+ *     { "extends": "@scope/typescript/tsconfig.nextjs.json" }
+ *
+ * ── Two strategies for packages ───────────────────────────────────────────────
+ *
+ * INTERNAL (private: true, never published):
+ *   - noEmit: true — no dist/, no build script, no build step ever
+ *   - Consumed via path alias: @scope/pkg → packages/pkg/index.ts (source)
+ *   - ESNext + Bundler: the bundler (Vite/Next.js/esbuild) handles resolution
+ *     at app build time, so no .js extensions needed in source imports
+ *
+ * PUBLIC (published to npm):
+ *   - Emits to dist/ via tsc
+ *   - NodeNext + NodeNext: Node.js ESM requires .js extensions in source
+ *   - composite + incremental for Nx project reference caching
+ *
+ * ── The root tsconfig.base.json ───────────────────────────────────────────────
+ *   Only holds: target, strict flags, esModuleInterop, isolatedModules, and
+ *   the global paths map. Does NOT set module or moduleResolution — those
+ *   belong in the per-preset files inside packages/typescript/.
  */
 
-// PackageVisibility is the canonical type — imported by consumers from config.ts
 import type { PackageVisibility } from "./config.js";
 export type { PackageVisibility };
 
-// ─── Root workspace tsconfig.base.json ────────────────────────────────────────
+export type AppFramework = "nextjs" | "vite" | "remix" | "expo";
+
+// ─── 1. Root tsconfig.base.json ───────────────────────────────────────────────
 
 export function rootTsConfigBase(scope: string): object {
 	return {
 		$schema: "https://json.schemastore.org/tsconfig",
-		display: "Base",
+		display: "Base — inherited by all presets in packages/typescript",
 		compilerOptions: {
-			// --- Language & output ---
 			target: "ES2022",
-			module: "NodeNext",
-			moduleResolution: "NodeNext",
-			lib: ["ES2022"],
-			// --- Strictness ---
+			// Strict settings — inherited by all presets
 			strict: true,
 			noUncheckedIndexedAccess: true,
 			noImplicitOverride: true,
 			exactOptionalPropertyTypes: true,
-			// --- Emit ---
-			declaration: true,
-			declarationMap: true,
-			sourceMap: true,
+			// Interop
 			esModuleInterop: true,
 			skipLibCheck: true,
 			isolatedModules: true,
-			// --- Paths — inherited by every package and app ---
+			// Global path aliases.
+			// Every package and app imports @scope/anything and TypeScript resolves
+			// it directly to the source — no build step required for internal packages.
 			baseUrl: ".",
 			paths: {
-				[`@${scope}/*`]: ["./packages/*/index.ts"],
+				[`@${scope}/*`]: ["./packages/*"],
 			},
 		},
 	};
 }
 
-// ─── Package tsconfigs ────────────────────────────────────────────────────────
+// ─── 2. packages/typescript/ workspace package ────────────────────────────────
+
+/**
+ * Returns the package.json for the @scope/typescript workspace package.
+ * Private, never published. Its exports point at the tsconfig preset files
+ * so other packages can extend them by package name.
+ */
+export function typescriptPackageJson(scope: string): object {
+	return {
+		name: `@${scope}/typescript`,
+		version: "0.0.0",
+		private: true,
+		// Expose each tsconfig preset as a named export so packages can do:
+		//   "extends": "@scope/typescript/tsconfig.internal.json"
+		exports: {
+			"./tsconfig.base.json": "./tsconfig.base.json",
+			"./tsconfig.internal.json": "./tsconfig.internal.json",
+			"./tsconfig.package.json": "./tsconfig.package.json",
+			"./tsconfig.nextjs.json": "./tsconfig.nextjs.json",
+			"./tsconfig.vite.json": "./tsconfig.vite.json",
+			"./tsconfig.remix.json": "./tsconfig.remix.json",
+			"./tsconfig.expo.json": "./tsconfig.expo.json",
+		},
+	};
+}
+
+/**
+ * Returns a map of filename → content for every file inside packages/typescript/.
+ * Written by `init` and regenerated by `migrate`.
+ */
+export function typescriptPresets(): Record<string, object> {
+	return {
+		// ── tsconfig.base.json ───────────────────────────────────────────────
+		// One-hop re-export of the root base. Presets only need to extend this
+		// rather than navigating up to the root themselves.
+		"tsconfig.base.json": {
+			$schema: "https://json.schemastore.org/tsconfig",
+			display: "Re-exports workspace root tsconfig.base.json",
+			extends: "../../tsconfig.base.json",
+		},
+
+		// ── tsconfig.internal.json ───────────────────────────────────────────
+		// For packages that are NEVER built. Source only, consumed directly via
+		// path aliases. Bundler resolution so no .js extensions needed.
+		"tsconfig.internal.json": {
+			$schema: "https://json.schemastore.org/tsconfig",
+			display: "Internal package — source-only, no emit, no build step",
+			extends: "./tsconfig.base.json",
+			compilerOptions: {
+				module: "ESNext",
+				moduleResolution: "Bundler",
+				// No outDir, no rootDir — there is no output
+				noEmit: true,
+				// Keep declaration + declarationMap for IDE go-to-definition across the monorepo
+				declaration: true,
+				declarationMap: true,
+				sourceMap: true,
+			},
+		},
+
+		// ── tsconfig.package.json ────────────────────────────────────────────
+		// For packages that ARE built and published (consumed from dist/).
+		// NodeNext required for Node.js ESM. Packages override outDir/rootDir.
+		"tsconfig.package.json": {
+			$schema: "https://json.schemastore.org/tsconfig",
+			display: "Public package — built to dist/, NodeNext ESM",
+			extends: "./tsconfig.base.json",
+			compilerOptions: {
+				module: "NodeNext",
+				moduleResolution: "NodeNext",
+				declaration: true,
+				declarationMap: true,
+				sourceMap: true,
+				composite: true,
+				incremental: true,
+				stripInternal: true,
+			},
+		},
+
+		// ── tsconfig.nextjs.json ─────────────────────────────────────────────
+		"tsconfig.nextjs.json": {
+			$schema: "https://json.schemastore.org/tsconfig",
+			display: "Next.js app",
+			extends: "./tsconfig.base.json",
+			compilerOptions: {
+				module: "ESNext",
+				moduleResolution: "Bundler",
+				lib: ["ES2022", "DOM", "DOM.Iterable"],
+				jsx: "preserve",
+				allowJs: true,
+				noEmit: true,
+				incremental: true,
+				plugins: [{ name: "next" }],
+			},
+		},
+
+		// ── tsconfig.vite.json ───────────────────────────────────────────────
+		"tsconfig.vite.json": {
+			$schema: "https://json.schemastore.org/tsconfig",
+			display: "Vite + React app",
+			extends: "./tsconfig.base.json",
+			compilerOptions: {
+				module: "ESNext",
+				moduleResolution: "Bundler",
+				lib: ["ES2022", "DOM", "DOM.Iterable"],
+				jsx: "react-jsx",
+				noEmit: true,
+				useDefineForClassFields: true,
+			},
+		},
+
+		// ── tsconfig.remix.json ──────────────────────────────────────────────
+		"tsconfig.remix.json": {
+			$schema: "https://json.schemastore.org/tsconfig",
+			display: "Remix app (Vite-based)",
+			extends: "./tsconfig.base.json",
+			compilerOptions: {
+				module: "ESNext",
+				moduleResolution: "Bundler",
+				lib: ["ES2022", "DOM", "DOM.Iterable"],
+				jsx: "react-jsx",
+				noEmit: true,
+			},
+		},
+
+		// ── tsconfig.expo.json ───────────────────────────────────────────────
+		"tsconfig.expo.json": {
+			$schema: "https://json.schemastore.org/tsconfig",
+			display: "Expo / React Native app",
+			extends: "./tsconfig.base.json",
+			compilerOptions: {
+				module: "ESNext",
+				moduleResolution: "Bundler",
+				lib: ["ES2022"],
+				jsx: "react-native",
+				noEmit: true,
+				allowSyntheticDefaultImports: true,
+			},
+		},
+	};
+}
+
+// ─── 3. Per-package tsconfig.json ─────────────────────────────────────────────
 
 interface PackageTsConfigOptions {
 	scope: string;
 	pkgName: string;
 	visibility: PackageVisibility;
-	/** true for React component packages — adds jsx and DOM lib */
+	/** true for React packages — adds jsx:react-jsx and DOM lib */
 	react?: boolean;
-	/** Relative path from package dir to workspace root, default "../../" */
-	rootRelative?: string;
 }
 
 export function packageTsConfig(opts: PackageTsConfigOptions): object {
-	const rootRel = opts.rootRelative ?? "../..";
-	const base: Record<string, unknown> = {
-		$schema: "https://json.schemastore.org/tsconfig",
-		extends: `${rootRel}/tsconfig.base.json`,
-		compilerOptions: {
-			// Packages always emit to dist/
-			outDir: "dist",
-			rootDir: ".",
-			// Composite enables project references and Nx incremental builds
-			composite: true,
-			incremental: true,
-			tsBuildInfoFile: "dist/.tsbuildinfo",
-		},
-		include: ["**/*.ts", "**/*.tsx"],
-		exclude: ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"],
-	};
+	const isInternal = opts.visibility === "internal";
+	const preset = isInternal
+		? `@${opts.scope}/typescript/tsconfig.internal.json`
+		: `@${opts.scope}/typescript/tsconfig.package.json`;
 
-	const co = base.compilerOptions as Record<string, unknown>;
+	const co: Record<string, unknown> = {};
 
-	// React packages need jsx and DOM types
 	if (opts.react) {
-		co["jsx"] = "react-jsx";
-		co["lib"] = ["ES2022", "DOM", "DOM.Iterable"];
+		co.jsx = "react-jsx";
+		co.lib = ["ES2022", "DOM", "DOM.Iterable"];
 	}
 
-	// Public packages get extras for clean npm publishing
-	if (opts.visibility === "public") {
-		co["stripInternal"] = true; // strips @internal from .d.ts
-		co["declarationDir"] = "dist"; // explicit — avoids surprises
+	if (isInternal) {
+		// Self-referencing alias: within-package imports can use @scope/name
+		co.paths = { [`@${opts.scope}/${opts.pkgName}`]: ["./index.ts"] };
+		co.baseUrl = ".";
+	} else {
+		// Public packages need explicit output paths
+		co.outDir = "dist";
+		co.rootDir = ".";
+		co.tsBuildInfoFile = "dist/.tsbuildinfo";
+		co.declarationDir = "dist";
 	}
 
-	// Internal packages get a self-referencing path so imports within the
-	// package can use the scoped name instead of relative paths
-	if (opts.visibility === "internal") {
-		const existingPaths = (co["paths"] as Record<string, string[]>) ?? {};
-		co["paths"] = {
-			...existingPaths,
-			[`@${opts.scope}/${opts.pkgName}`]: ["./index.ts"],
-		};
-		co["baseUrl"] = ".";
-	}
+	const hasCo = Object.keys(co).length > 0;
 
-	return base;
+	return {
+		$schema: "https://json.schemastore.org/tsconfig",
+		extends: preset,
+		...(hasCo ? { compilerOptions: co } : {}),
+		include: ["**/*.ts", "**/*.tsx"],
+		exclude: [
+			"node_modules",
+			...(isInternal ? [] : ["dist"]),
+			"**/*.test.ts",
+			"**/*.spec.ts",
+		],
+	};
 }
 
-// ─── App tsconfigs ────────────────────────────────────────────────────────────
-
-type AppFramework = "nextjs" | "vite" | "remix" | "expo";
+// ─── 4. Per-app tsconfig.json ─────────────────────────────────────────────────
 
 interface AppTsConfigOptions {
 	scope: string;
 	framework: AppFramework;
 	hasSrcDir: boolean;
+	/**
+	 * Whether packages/typescript/ exists in the workspace.
+	 * Falls back to ../../tsconfig.base.json for pre-migration workspaces.
+	 * Defaults to true — all new workspaces have it.
+	 */
+	typescriptPkgExists?: boolean;
 }
 
 export function appTsConfig(opts: AppTsConfigOptions): object {
 	const aliasBase = opts.hasSrcDir ? "./src/*" : "./*";
+	const hasPkg = opts.typescriptPkgExists !== false; // default true
 
-	// Framework-specific compiler option overrides
-	const frameworkOverrides = frameworkCompilerOptions(opts.framework);
+	const extendsPath = hasPkg
+		? `@${opts.scope}/typescript/${frameworkPresetFile(opts.framework)}`
+		: "../../tsconfig.base.json";
+
+	const include: string[] = opts.hasSrcDir
+		? ["src/**/*.ts", "src/**/*.tsx"]
+		: ["**/*.ts", "**/*.tsx"];
+
+	if (opts.framework === "nextjs") {
+		include.push("next-env.d.ts", ".next/types/**/*.ts");
+	}
 
 	return {
 		$schema: "https://json.schemastore.org/tsconfig",
-		extends: "../../tsconfig.base.json",
+		extends: extendsPath,
 		compilerOptions: {
-			...frameworkOverrides,
-			// App-level alias: @/* → src/* or root
-			paths: {
-				"@/*": [aliasBase],
-				// Workspace packages resolved via inherited baseUrl paths from base
-			},
-			// Apps don't emit — the framework build tool handles that
-			noEmit: true,
+			paths: { "@/*": [aliasBase] },
 		},
-		// Only include the app's own source files
-		include: [
-			opts.hasSrcDir ? "src/**/*.ts" : "**/*.ts",
-			opts.hasSrcDir ? "src/**/*.tsx" : "**/*.tsx",
-			...(opts.framework === "nextjs"
-				? ["next-env.d.ts", ".next/types/**/*.ts"]
-				: []),
-		],
-		exclude: ["node_modules", "dist"],
+		include,
+		exclude: ["node_modules"],
 	};
 }
 
-function frameworkCompilerOptions(framework: AppFramework): Record<string, unknown> {
+function frameworkPresetFile(framework: AppFramework): string {
 	switch (framework) {
 		case "nextjs":
-			return {
-				lib: ["ES2022", "DOM", "DOM.Iterable"],
-				jsx: "preserve",              // Next.js handles JSX transform
-				plugins: [{ name: "next" }],  // enables Next.js TS plugin
-				allowJs: true,
-				incremental: true,
-				tsBuildInfoFile: ".next/cache/tsconfig.tsbuildinfo",
-			};
+			return "tsconfig.nextjs.json";
 		case "vite":
-			return {
-				lib: ["ES2022", "DOM", "DOM.Iterable"],
-				jsx: "react-jsx",
-				useDefineForClassFields: true,
-			};
+			return "tsconfig.vite.json";
 		case "remix":
-			return {
-				lib: ["ES2022", "DOM", "DOM.Iterable"],
-				jsx: "react-jsx",
-				moduleResolution: "Bundler",   // Remix/Vite uses bundler resolution
-				module: "ESNext",
-			};
+			return "tsconfig.remix.json";
 		case "expo":
-			return {
-				lib: ["ES2022"],
-				jsx: "react-native",
-				allowSyntheticDefaultImports: true,
-			};
+			return "tsconfig.expo.json";
 	}
 }
+
+// ─── 5. Root solution tsconfig.json ───────────────────────────────────────────
+
+export function rootTsConfigSolution(
+	packages: string[],
+	apps: string[],
+): object {
+	return {
+		$schema: "https://json.schemastore.org/tsconfig",
+		display: "Workspace solution — IDE and tsc --build entry point",
+		files: [],
+		references: [
+			...packages.map((p) => ({ path: `./packages/${p}` })),
+			...apps.map((a) => ({ path: `./apps/${a}` })),
+		],
+	};
+}
+
+// ─── Backward-compat re-exports ───────────────────────────────────────────────
+// toolingPresets was the old API name — kept so migrate.ts compiles without
+// changes until the rename propagates through all call sites.
+/** @deprecated Use typescriptPresets() instead */
+export const toolingPresets = typescriptPresets;

@@ -96,6 +96,7 @@ export function typescriptPackageJson(scope: string): object {
 		// Expose each tsconfig preset as a named export so packages can do:
 		//   "extends": "@scope/typescript/tsconfig.internal.json"
 		exports: {
+			"./tsconfig.json": "./tsconfig.base.json",
 			"./tsconfig.base.json": "./tsconfig.base.json",
 			"./tsconfig.internal.json": "./tsconfig.internal.json",
 			"./tsconfig.package.json": "./tsconfig.package.json",
@@ -118,8 +119,23 @@ export function typescriptPresets(): Record<string, object> {
 		// rather than navigating up to the root themselves.
 		"tsconfig.base.json": {
 			$schema: "https://json.schemastore.org/tsconfig",
-			display: "Re-exports workspace root tsconfig.base.json",
+			display: "Tooling base — extends workspace root tsconfig.base.json",
 			extends: "../../tsconfig.base.json",
+			compilerOptions: {
+				composite: true,
+				declaration: true,
+				declarationMap: true,
+				emitDeclarationOnly: true,
+				importHelpers: true,
+				isolatedModules: true,
+				lib: ["ES2022"],
+				module: "NodeNext",
+				moduleResolution: "NodeNext",
+				noEmitOnError: true,
+				noFallthroughCasesInSwitch: true,
+				noImplicitReturns: true,
+				noUnusedLocals: true,
+			},
 		},
 
 		// ── tsconfig.internal.json ───────────────────────────────────────────

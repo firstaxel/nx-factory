@@ -41,6 +41,8 @@ interface MigrationStatus {
 	configVersion: string | null;
 	hasTsConfigBase: boolean;
 	hasToolingTypescriptPackage: boolean;
+	hasToolingTypescriptBaseExtendsRoot: boolean;
+	hasToolingTypescriptTsconfigExportAlias: boolean;
 	hasLegacyTypescriptPackage: boolean;
 	hasRootToolingWorkspaceEntry: boolean;
 	hasUiPackageVisibility: boolean;
@@ -115,80 +117,94 @@ export async function migrateCommand(options: MigrateOptions): Promise<void> {
 				removeJsExtensions: false,
 				cleanupBackups: false,
 			}
-		: await inquirer.prompt([
-				{
-					type: "confirm",
-					name: "proceed",
-					message: q(
-						"Apply all migrations?",
-						"a backup of each changed file will be written as <file>.migration-backup",
-					),
-					default: true,
-				},
-				{
-					type: "confirm",
-					name: "migrateTypescriptTooling",
-					message: q(
-						"Migrate TypeScript tooling package?",
-						"move packages/typescript to tooling/typescript and refresh tsconfig presets",
-					),
-					default: true,
-					when:
-						!status.hasToolingTypescriptPackage ||
-						status.hasLegacyTypescriptPackage,
-				},
-				{
-					type: "checkbox",
-					name: "packagesToMakeInternal",
-					message: q(
-						"Select packages to make internal",
-						"selected packages will get private:true in package.json",
-					),
-					choices: status.publicPackagesEligibleForInternalization.map(
-						(pkgName) => ({ name: pkgName, value: pkgName }),
-					),
-					when: status.publicPackagesEligibleForInternalization.length > 0,
-				},
-				{
-					type: "select",
-					name: "uiVisibility",
-					message: q(
-						"UI package visibility",
-						"internal = workspace only · public = published to npm",
-					),
-					choices: [
-						{
-							name: "internal  — private: true, workspace only",
-							value: "internal",
-						},
-						{ name: "public    — will be published to npm", value: "public" },
-					],
-					default: "internal",
-					when: !status.hasUiPackageVisibility,
-				},
-				{
-					type: "confirm",
-					name: "removeJsExtensions",
-					message: q(
-						"Remove .js extensions from internal package imports?",
-						`found ${status.internalPackagesWithJsExtensions.length} package(s) with .js extensions — safe to remove for Bundler resolution`,
-					),
-					default: status.internalPackagesWithJsExtensions.length > 0,
-					when: status.internalPackagesWithJsExtensions.length > 0,
-				},
-				{
-					type: "confirm",
-					name: "cleanupBackups",
-					message: q(
-						`Delete ${status.backupFileCount} existing .migration-backup file(s)?`,
-						"these are from a previous migration run",
-					),
-					default: false,
-					when: !options.yes && status.backupFileCount > 0,
-				},
-			]);
+		: await inquirer
+				.prompt([
+					{
+						type: "confirm",
+						name: "proceed",
+						message: q(
+							"Apply all migrations?",
+							"a backup of each changed file will be written as <file>.migration-backup",
+						),
+						default: true,
+					},
+					{
+						type: "confirm",
+						name: "migrateTypescriptTooling",
+						message: q(
+							"Migrate TypeScript tooling package?",
+							"move packages/typescript to tooling/typescript and refresh tsconfig presets",
+						),
+						default: true,
+						when:
+							!status.hasToolingTypescriptPackage ||
+							status.hasLegacyTypescriptPackage ||
+							!status.hasToolingTypescriptBaseExtendsRoot ||
+							!status.hasToolingTypescriptTsconfigExportAlias,
+					},
+					{
+						type: "checkbox",
+						name: "packagesToMakeInternal",
+						message: q(
+							"Select packages to make internal",
+							"selected packages will get private:true in package.json",
+						),
+						choices: status.publicPackagesEligibleForInternalization.map(
+							(pkgName) => ({ name: pkgName, value: pkgName }),
+						),
+						when: status.publicPackagesEligibleForInternalization.length > 0,
+					},
+					{
+						type: "select",
+						name: "uiVisibility",
+						message: q(
+							"UI package visibility",
+							"internal = workspace only · public = published to npm",
+						),
+						choices: [
+							{
+								name: "internal  — private: true, workspace only",
+								value: "internal",
+							},
+							{ name: "public    — will be published to npm", value: "public" },
+						],
+						default: "internal",
+						when: !status.hasUiPackageVisibility,
+					},
+					{
+						type: "confirm",
+						name: "removeJsExtensions",
+						message: q(
+							"Remove .js extensions from internal package imports?",
+							`found ${status.internalPackagesWithJsExtensions.length} package(s) with .js extensions — safe to remove for Bundler resolution`,
+						),
+						default: status.internalPackagesWithJsExtensions.length > 0,
+						when: status.internalPackagesWithJsExtensions.length > 0,
+					},
+					{
+						type: "confirm",
+						name: "cleanupBackups",
+						message: q(
+							`Delete ${status.backupFileCount} existing .migration-backup file(s)?`,
+							"these are from a previous migration run",
+						),
+						default: false,
+						when: !options.yes && status.backupFileCount > 0,
+					},
+				])
+				.catch((err) => {
+					if (
+						(err as { message?: string }).message?.includes("User force closed")
+					) {
+						console.log(c.dim("\n  Migration cancelled.\n"));
+						process.exit(0);
+					}
+					throw err;
+				});
 
-	if (!answers.proceed) {
+	// Ensure proceed is defined with proper default
+	const proceedAnswer = answers.proceed ?? true;
+	if (!proceedAnswer) {
 		console.log(c.dim("\n  Migration cancelled.\n"));
 		return;
 	}
@@ -197,7 +213,10 @@ export async function migrateCommand(options: MigrateOptions): Promise<void> {
 		"internal") as PackageVisibility;
 	const shouldMigrateTypescriptTooling =
 		((answers.migrateTypescriptTooling as boolean | undefined) ?? true) &&
-		(!status.hasToolingTypescriptPackage || status.hasLegacyTypescriptPackage);
+		(!status.hasToolingTypescriptPackage ||
+			status.hasLegacyTypescriptPackage ||
+			!status.hasToolingTypescriptBaseExtendsRoot ||
+			!status.hasToolingTypescriptTsconfigExportAlias);
 	const packagesToMakeInternal =
 		(answers.packagesToMakeInternal as string[] | undefined) ?? [];
 	const removeJsExtensions =
@@ -549,6 +568,10 @@ async function analyseWorkspace(root: string): Promise<MigrationStatus> {
 	const hasToolingTypescriptPackage = await pathExists(
 		path.join(root, "tooling", "typescript", "tsconfig.internal.json"),
 	);
+	const hasToolingTypescriptBaseExtendsRoot =
+		await toolingTypescriptBaseExtendsRoot(root);
+	const hasToolingTypescriptTsconfigExportAlias =
+		await toolingTypescriptPackageJsonHasTsconfigAlias(root);
 	const hasLegacyTypescriptPackage = await pathExists(
 		path.join(root, "packages", "typescript", "tsconfig.internal.json"),
 	);
@@ -697,6 +720,8 @@ async function analyseWorkspace(root: string): Promise<MigrationStatus> {
 		configVersion: cfg?.version ?? null,
 		hasTsConfigBase,
 		hasToolingTypescriptPackage,
+		hasToolingTypescriptBaseExtendsRoot,
+		hasToolingTypescriptTsconfigExportAlias,
 		hasLegacyTypescriptPackage,
 		hasRootToolingWorkspaceEntry,
 		hasUiPackageVisibility: !!cfg?.uiPackageVisibility,
@@ -716,6 +741,8 @@ function isFullyMigrated(s: MigrationStatus): boolean {
 		s.hasConfig &&
 		s.hasTsConfigBase &&
 		s.hasToolingTypescriptPackage &&
+		s.hasToolingTypescriptBaseExtendsRoot &&
+		s.hasToolingTypescriptTsconfigExportAlias &&
 		!s.hasLegacyTypescriptPackage &&
 		s.hasRootToolingWorkspaceEntry &&
 		s.hasUiPackageVisibility &&
@@ -743,6 +770,14 @@ function printAnalysis(s: MigrationStatus): void {
 	console.log(
 		`  ${s.hasToolingTypescriptPackage ? tick : cross}  tooling/typescript presets ${s.hasToolingTypescriptPackage ? "" : c.yellow("missing — will migrate")}`,
 	);
+	if (s.hasToolingTypescriptPackage) {
+		console.log(
+			`  ${s.hasToolingTypescriptBaseExtendsRoot ? tick : cross}  tooling/typescript/tsconfig.base.json extends ../../tsconfig.base.json ${s.hasToolingTypescriptBaseExtendsRoot ? "" : c.yellow("missing — will refresh presets")}`,
+		);
+		console.log(
+			`  ${s.hasToolingTypescriptTsconfigExportAlias ? tick : cross}  tooling/typescript/package.json exports ./tsconfig.json ${s.hasToolingTypescriptTsconfigExportAlias ? "" : c.yellow("missing — will refresh package.json")}`,
+		);
+	}
 	if (s.hasLegacyTypescriptPackage) {
 		console.log(
 			`  ${cross}  legacy packages/typescript detected ${c.yellow("will migrate to tooling/typescript")}`,
@@ -859,6 +894,43 @@ async function hasToolingWorkspaceEntry(root: string): Promise<boolean> {
 			return pkgJson.workspaces.packages.includes("tooling/*");
 		}
 		return false;
+	} catch {
+		return false;
+	}
+}
+
+async function toolingTypescriptBaseExtendsRoot(
+	root: string,
+): Promise<boolean> {
+	const { default: fs } = await import("fs-extra");
+	const tsBasePath = path.join(
+		root,
+		"tooling",
+		"typescript",
+		"tsconfig.base.json",
+	);
+	if (!(await pathExists(tsBasePath))) return false;
+
+	try {
+		const tsBase = (await fs.readJson(tsBasePath)) as { extends?: unknown };
+		return tsBase.extends === "../../tsconfig.base.json";
+	} catch {
+		return false;
+	}
+}
+
+async function toolingTypescriptPackageJsonHasTsconfigAlias(
+	root: string,
+): Promise<boolean> {
+	const { default: fs } = await import("fs-extra");
+	const pkgPath = path.join(root, "tooling", "typescript", "package.json");
+	if (!(await pathExists(pkgPath))) return false;
+
+	try {
+		const pkgJson = (await fs.readJson(pkgPath)) as {
+			exports?: Record<string, unknown>;
+		};
+		return pkgJson.exports?.["./tsconfig.json"] === "./tsconfig.base.json";
 	} catch {
 		return false;
 	}
@@ -1249,16 +1321,32 @@ export async function cleanupMigrationBackups(
 	let deleted = 0;
 
 	async function walk(dir: string): Promise<void> {
-		const entries = await fs.readdir(dir, { withFileTypes: true });
-		for (const entry of entries) {
-			if (entry.name === "node_modules" || entry.name === ".git") continue;
-			const full = path.join(dir, entry.name);
-			if (entry.isDirectory()) {
-				await walk(full);
-			} else if (entry.isFile() && entry.name.endsWith(".migration-backup")) {
-				deleted++;
-				if (!dryRun) await fs.remove(full);
+		try {
+			const entries = await fs.readdir(dir, { withFileTypes: true });
+			for (const entry of entries) {
+				if (entry.name === "node_modules" || entry.name === ".git") continue;
+				const full = path.join(dir, entry.name);
+				if (entry.isDirectory()) {
+					try {
+						await walk(full);
+					} catch {
+						// Skip inaccessible directories (permission errors, broken symlinks, etc.)
+						continue;
+					}
+				} else if (entry.isFile() && entry.name.endsWith(".migration-backup")) {
+					try {
+						deleted++;
+						if (!dryRun) await fs.remove(full);
+					} catch {
+						// Skip files that can't be deleted (permission errors, locked files, etc.)
+						deleted--; // Decrement since we couldn't actually delete it
+						continue;
+					}
+				}
 			}
+		} catch {
+			// Skip directories that can't be read (permission errors, etc.)
+			return;
 		}
 	}
 

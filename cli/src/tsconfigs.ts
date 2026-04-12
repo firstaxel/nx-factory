@@ -149,7 +149,7 @@ export function typescriptPresets(): Record<string, object> {
 				module: "ESNext",
 				moduleResolution: "Bundler",
 				// No outDir, no rootDir — there is no output
-				noEmit: true,
+				composite: true,
 				// Keep declaration + declarationMap for IDE go-to-definition across the monorepo
 				declaration: true,
 				declarationMap: true,

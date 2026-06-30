@@ -1,21 +1,56 @@
 ---
-title: nx-factory-cli Docs
-description: Scaffold and manage Nx monorepos with shared UI and auth.
+title: Introduction
+description: Scaffold and manage production-ready Nx monorepos with shared UI, auth, and a robust TypeScript config hierarchy.
 icon: Terminal
 ---
 
-nx-factory-cli helps you bootstrap and manage production-ready Nx workspaces.
+nx-factory-cli is a command-line tool that bootstraps and manages Nx monorepos. It makes the decisions that take hours to figure out yourself — TypeScript config inheritance, shared component libraries, workspace-native auth packages, and framework-specific wiring — so you can focus on shipping.
 
-Use the CLI reference for commands, options, and examples.
+## What it sets up
 
-## Get Started
+```
+my-monorepo/
+├── tsconfig.base.json          ← NodeNext, strict, global @scope/* paths
+├── nx-factory.config.json      ← workspace metadata
+├── packages/
+│   ├── ui/                     ← shadcn/ui + Tailwind v4, ESM, barrel exports
+│   └── auth/                   ← Clerk / Better Auth / WorkOS (optional)
+└── apps/
+    └── my-app/                 ← Next.js / Vite / Remix / Expo, pre-wired
+```
+
+Every package and app extends `tsconfig.base.json`. Every app gets `@workspace/ui` wired in automatically. The `exports` field is always present so sub-path imports work correctly.
+
+## Install
 
 ```bash
+# Global install
+npm install -g nx-factory-cli
+
+# Or use without installing
 npx nx-factory-cli init
 ```
 
+## Quick start
+
+```bash
+nx-factory-cli init                          # create workspace
+nx-factory-cli add-app --framework nextjs    # add a Next.js app
+nx-factory-cli add-auth --provider clerk     # add auth
+nx-factory-cli add-component button card     # add shadcn components
+```
+
+## Already using nx-factory-cli?
+
+If your workspace was initialised with an older version of the CLI, run the migration command to bring it up to date:
+
+```bash
+nx-factory-cli migrate
+```
+
+It will analyse your workspace, show you what's outdated, and apply targeted patches — backing up every changed file.
+
 <Cards>
-  <Card title="Commands" href="/docs/commands" description="Individual page for each CLI command." />
-  <Card title="CLI Reference" href="/docs/cli" description="Complete command reference on one page." />
-  <Card title="Repository README" href="https://github.com/firstaxel/nx-factory-cli " description="Project overview and contribution info." />
+  <Card title="Commands" href="/docs/commands" description="Every command with options, examples, and a breakdown of what it writes." />
+  <Card title="CLI Reference" href="/docs/cli" description="All commands on a single page for quick lookup." />
 </Cards>

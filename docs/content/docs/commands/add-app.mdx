@@ -1,6 +1,6 @@
 ---
 title: add-app
-description: Scaffold a new app and wire it to shared UI.
+description: Scaffold a new app using its official framework CLI, then automatically wire it to the shared UI package.
 ---
 
 ## Usage
@@ -8,22 +8,56 @@ description: Scaffold a new app and wire it to shared UI.
 ```bash
 nx-factory-cli add-app
 nx-factory-cli add-app --name dashboard --framework nextjs
-nx-factory-cli add-app --name marketing --framework vite
+nx-factory-cli add-app --name marketing --framework vite --yes
 nx-factory-cli add-app --dry-run
 ```
 
 ## Options
 
 | Option | Description |
-| --- | --- |
-| `-n, --name <n>` | App name |
+|---|---|
+| `-n, --name <n>` | App name (lives at `apps/<n>`) |
 | `-f, --framework <framework>` | `nextjs`, `vite`, `remix`, `expo` |
-| `-y, --yes` | Skip prompts and use defaults |
-| `--dry-run` | Preview changes only |
+| `-y, --yes` | Skip prompts, use defaults |
+| `--dry-run` | Preview without writing |
 
-## What It Does
+## Supported frameworks
 
-- Scaffolds app under `apps/<name>`
-- Adds `@workspace/ui` dependency
-- Patches framework config for shared UI styles
-- Updates app tsconfig paths
+| Key | Scaffolder | Notes |
+|---|---|---|
+| `nextjs` | `create-next-app@latest` | App Router, TypeScript, Tailwind, src/ dir |
+| `vite` | `create-vite@latest` | React + TypeScript template |
+| `remix` | `create-remix@latest` | Vite-based, no git init |
+| `expo` | `create-expo-app@latest` | TypeScript blank template |
+
+## What it does
+
+**Step 1 — Run the real framework scaffolder**
+
+The CLI runs `create-next-app`, `create-vite`, etc. interactively. You see the real scaffolder's output. The app is created at `apps/<n>`.
+
+**Step 2 — Add @workspace/ui dependency**
+
+Adds `"@workspace/ui": "workspace:*"` to the app's `package.json`.
+
+**Step 3 — Patch framework config**
+
+Each framework gets targeted patches:
+
+- **Next.js**: adds `transpilePackages: ["@workspace/ui"]` to `next.config.ts`, injects CSS import into `src/app/layout.tsx`
+- **Vite**: prepends `import tailwindcss from "@tailwindcss/vite"` to `vite.config.ts`, injects CSS import into `src/main.tsx`
+- **Remix**: same Tailwind v4 injection as Vite, injects CSS import into `app/root.tsx`
+- **Expo**: adds NativeWind + tailwindcss v3, writes `tailwind.config.js` and `babel.config.js`
+
+**Step 4 — Write app tsconfig**
+
+Writes a `tsconfig.json` that extends `../../tsconfig.base.json` with framework-specific settings. The `@/*` alias points to `src/*`. No `packages/**/*` in `include` — that causes slow builds and duplicate errors. Path resolution is handled by the inherited `paths` from the base.
+
+## Importing shared components
+
+After `add-app`, any component from the UI package is immediately importable:
+
+```tsx
+import { Button } from "@workspace/ui";
+import "@workspace/ui/styles"; // CSS tokens + Tailwind
+```

@@ -1,5 +1,6 @@
 import path from "path";
 import { writeJson } from "../../files.js";
+import { packageTsConfig } from "../../tsconfigs.js";
 import { scopedPackageName } from "../../config.js";
 import type { AuthPackageScaffolder } from "./types.js";
 
@@ -61,25 +62,11 @@ export async function writeAuthPackageBase(
 		peerDependencies: scaffolder.peerDependencies,
 	});
 
-	// ── tsconfig.json ───────────────────────────────────────────────────────────
-	await writeJson(path.join(pkgDir, "tsconfig.json"), {
-		extends: "../../tsconfig.base.json",
-		compilerOptions: {
-			target: "ES2022",
-			module: "ESNext",
-			moduleResolution: "bundler",
-			jsx: "react-jsx",
-			lib: ["ES2022", "DOM"],
-			strict: true,
-			declaration: true,
-			declarationMap: true,
-			sourceMap: true,
-			esModuleInterop: true,
-			skipLibCheck: true,
-			outDir: "dist",
-			rootDir: ".",
-		},
-		include: ["**/*"],
-		exclude: ["node_modules", "dist"],
-	});
+	// ── tsconfig.json — built from shared factory ──────────────────────────────
+	// Auth is always internal (private:true). It includes React for provider
+	// UI components (ClerkProvider, etc.) and DOM for browser auth flows.
+	await writeJson(
+		path.join(pkgDir, "tsconfig.json"),
+		packageTsConfig({ scope, pkgName: "auth", visibility: "internal", react: true }),
+	);
 }

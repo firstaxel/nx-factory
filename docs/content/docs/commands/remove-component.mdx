@@ -1,6 +1,6 @@
 ---
 title: remove-component
-description: Remove shadcn components from shared UI package.
+description: Remove one or more shadcn/ui components from the shared UI package and clean up barrel exports.
 ---
 
 ## Usage
@@ -14,18 +14,27 @@ nx-factory-cli remove-component badge --dry-run
 
 ## Arguments
 
-| Argument | Description |
-| --- | --- |
-| `[components...]` | Optional component names |
+Pass component names directly, or run with no arguments for an interactive picker listing all currently installed components.
 
 ## Options
 
 | Option | Description |
-| --- | --- |
-| `-y, --yes` | Skip confirmation prompts |
-| `--dry-run` | Preview changes only |
+|---|---|
+| `-y, --yes` | Skip the confirmation prompt |
+| `--dry-run` | Preview what would be removed without writing anything |
 
-## What It Does
+## What it does
 
-- Removes component files
-- Cleans barrel exports
+1. Detects the UI package by looking for `components.json`
+2. Removes `packages/ui/components/ui/<component>.tsx` (and any related files)
+3. Removes the corresponding `export * from "./components/ui/<component>.js"` line from `index.tsx`
+
+## Before removing
+
+Check that no apps are actively importing the component:
+
+```bash
+nx-factory-cli list   # shows which apps use each component
+```
+
+Removing a component that's imported in an app will cause a TypeScript build error in that app. Update the app's imports first.

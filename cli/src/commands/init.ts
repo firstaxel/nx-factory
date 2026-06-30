@@ -1,8 +1,22 @@
 import inquirer from "inquirer";
 import path from "path";
+import { createRequire } from "module";
 import { run, runInDir, pmAdd, pmx, pmxArgs } from "../exec.js";
 import { writeJson, writeFile, ensureDir, pathExists } from "../files.js";
-import { saveConfig, normalizeScope, scopedPackageName } from "../config.js";
+import {
+	saveConfig,
+	normalizeScope,
+	scopedPackageName,
+	type PackageVisibility,
+} from "../config.js";
+import {
+	rootTsConfigBase,
+	typescriptPackageJson,
+	typescriptPresets,
+	packageTsConfig,
+	appTsConfig,
+	rootTsConfigSolution,
+} from "../tsconfigs.js";
 import { scaffoldExampleApp } from "./add-app.js";
 import {
 	c,
@@ -13,6 +27,9 @@ import {
 	printWarn,
 } from "../ui.js";
 
+const _require = createRequire(import.meta.url);
+const _cliPkg = _require("../../package.json") as { version: string };
+
 interface InitOptions {
 	name?: string;
 	pkgManager?: string;
@@ -20,7 +37,7 @@ interface InitOptions {
 	dryRun?: boolean;
 }
 
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 9;
 const SUPPORTED_PACKAGE_MANAGERS = ["pnpm", "npm", "yarn", "bun"] as const;
 
 function isSupportedPackageManager(
@@ -48,6 +65,7 @@ export async function initCommand(options: InitOptions): Promise<void> {
 		workspaceName: options.name ?? "my-monorepo",
 		pkgManager: providedPkgManager ?? "pnpm",
 		uiPackageName: "ui",
+		uiPackageVisibility: "internal" as PackageVisibility,
 		initialComponents: [] as string[],
 		addExampleApp: true,
 		baseColor: "neutral" as string,
@@ -83,6 +101,25 @@ export async function initCommand(options: InitOptions): Promise<void> {
 					validate: (v: string) =>
 						/^[a-z0-9-]+$/.test(v) ||
 						c.red("Only lowercase letters, numbers, and dashes"),
+				},
+				{
+					type: "select",
+					name: "uiPackageVisibility",
+					message: q(
+						"UI package visibility",
+						"internal = private to this monorepo · public = will be published to npm",
+					),
+					choices: [
+						{
+							name: "internal  — private: true, no npm publish",
+							value: "internal",
+						},
+						{
+							name: "public    — will be published to npm",
+							value: "public",
+						},
+					],
+					default: defaults.uiPackageVisibility,
 				},
 				{
 					type: "select",
@@ -132,6 +169,8 @@ export async function initCommand(options: InitOptions): Promise<void> {
 	const workspaceName = answers.workspaceName as string;
 	const scope = normalizeScope(workspaceName);
 	const uiPkgName = answers.uiPackageName as string;
+	const uiPackageVisibility = (answers.uiPackageVisibility ??
+		defaults.uiPackageVisibility) as PackageVisibility;
 	const baseColor = (answers.baseColor ?? "neutral") as string;
 	const initialComponents = answers.initialComponents as string[];
 	const addExampleApp = answers.addExampleApp as boolean;
@@ -184,7 +223,7 @@ export async function initCommand(options: InitOptions): Promise<void> {
 	});
 
 	await step(`Scaffold packages/${uiPkgName}`, () =>
-		scaffoldUiPackage(cwd, uiPkgName, pm, scope),
+		scaffoldUiPackage(cwd, uiPkgName, pm, scope, uiPackageVisibility),
 	);
 
 	await step("Install Tailwind v4", () => installUiDeps(cwd, uiPkgName, pm));
@@ -201,6 +240,10 @@ export async function initCommand(options: InitOptions): Promise<void> {
 	}
 
 	await step("Update nx.json", () => updateNxJson(cwd));
+
+	await step("Scaffold packages/typescript workspace package", () =>
+		writeTypescriptPackage(cwd, scope),
+	);
 
 	if (addExampleApp) {
 		await step("Scaffold example Next.js app", () =>
@@ -231,7 +274,8 @@ export async function initCommand(options: InitOptions): Promise<void> {
 					scope,
 					pkgManager: pm as "pnpm" | "npm" | "yarn" | "bun",
 					uiPackage: uiPkgName,
-					version: "1.0.0",
+					uiPackageVisibility,
+					version: _cliPkg.version,
 				},
 				cwd,
 			);
@@ -251,10 +295,14 @@ export async function initCommand(options: InitOptions): Promise<void> {
 						},
 					]
 				: []),
-			{
-				cmd: `${pm} nx build ${scopedPackageName(scope, uiPkgName)}`,
-				comment: "build the UI package",
-			},
+			...(uiPackageVisibility === "public"
+				? [
+						{
+							cmd: `${pm} nx build ${scopedPackageName(scope, uiPkgName)}`,
+							comment: "build the UI package",
+						},
+					]
+				: []),
 		],
 		tips: [
 			{
@@ -276,6 +324,7 @@ async function scaffoldUiPackage(
 	uiPkgName: string,
 	pm: string,
 	scope: string,
+	visibility: PackageVisibility = "internal",
 ): Promise<void> {
 	const pkgDir = path.join(cwd, "packages", uiPkgName);
 
@@ -284,20 +333,44 @@ async function scaffoldUiPackage(
 	await ensureDir(path.join(pkgDir, "styles"));
 
 	// package.json for the UI package
+	const isPublic = visibility === "public";
 	await writeJson(path.join(pkgDir, "package.json"), {
 		name: scopedPackageName(scope, uiPkgName),
 		version: "0.0.1",
-		private: true,
+		// public packages must NOT have private:true
+		...(isPublic ? {} : { private: true }),
 		type: "module",
-		scripts: {
-			build: "tsc -p tsconfig.json",
-			"build:watch": "tsc -p tsconfig.json --watch",
-			typecheck: "tsc --noEmit",
-		},
-
+		...(isPublic
+			? {
+					main: "./dist/index.js",
+					types: "./dist/index.d.ts",
+					exports: {
+						".": {
+							import: "./dist/index.js",
+							types: "./dist/index.d.ts",
+						},
+						"./styles": "./styles/globals.css",
+						"./components/*": {
+							import: "./dist/components/*.js",
+							types: "./dist/components/*.d.ts",
+						},
+					},
+					files: ["dist", "styles"],
+					publishConfig: { access: "public" },
+					scripts: {
+						build: "tsc -p tsconfig.json",
+						"build:watch": "tsc -p tsconfig.json --watch",
+						typecheck: "tsc --noEmit",
+					},
+				}
+			: {
+					scripts: {
+						typecheck: "tsc --noEmit",
+					},
+				}),
 		peerDependencies: {
-			react: " ^19",
-			"react-dom": " ^19",
+			react: "^18 || ^19",
+			"react-dom": "^18 || ^19",
 		},
 		devDependencies: {
 			"@types/react": "^19.0.0",
@@ -314,30 +387,11 @@ async function scaffoldUiPackage(
 		},
 	});
 
-	// tsconfig.json
-	await writeJson(path.join(pkgDir, "tsconfig.json"), {
-		compilerOptions: {
-			target: "ES2022",
-			module: "ESNext",
-			moduleResolution: "bundler",
-			jsx: "react-jsx",
-			strict: true,
-			declaration: true,
-			declarationMap: true,
-			sourceMap: true,
-			esModuleInterop: true,
-			skipLibCheck: true,
-			outDir: "dist",
-			rootDir: ".",
-			baseUrl: ".",
-			paths: {
-				[`@${scope}/*`]: ["../../packages/*"],
-				[`${scopedPackageName(scope, uiPkgName)}/*`]: ["./*"],
-			},
-		},
-		include: ["**/*"],
-		exclude: ["node_modules", "dist"],
-	});
+	// tsconfig.json — built from shared factory
+	await writeJson(
+		path.join(pkgDir, "tsconfig.json"),
+		packageTsConfig({ scope, pkgName: uiPkgName, visibility, react: true }),
+	);
 
 	// lib/utils.ts (cn helper)
 	await writeFile(
@@ -355,7 +409,7 @@ export function cn(...inputs: ClassValue[]) {
 	await writeFile(
 		path.join(pkgDir, "index.tsx"),
 		`// Auto-generated barrel — add new component exports here
-// Example: export { Button, type ButtonProps } from "./components/button";
+// Example: export { Button, type ButtonProps } from "./components/button.js";
 export { cn } from "${scopedPackageName(scope, uiPkgName)}/lib/utils";
 `,
 	);
@@ -743,7 +797,7 @@ async function updateBarrelExports(
 	}
 	const newExports = components
 		.filter((c) => !existing.includes(`/components/ui/${c}`))
-		.map((c) => `export * from "./components/ui/${c}";`)
+		.map((c) => `export * from "./components/ui/${c}.js";`)
 		.join("\n");
 	if (newExports) {
 		if (existing && !existing.endsWith("\n")) existing += "\n";
@@ -778,7 +832,7 @@ async function updatePackageJson(cwd: string): Promise<void> {
 	if (!(await pathExists(pkgJsonPath))) return;
 	const pkgJson = await fs.readJson(pkgJsonPath);
 
-	const required = ["packages/*", "apps/*"];
+	const required = ["packages/*", "apps/*", "tooling/*"];
 	if (Array.isArray(pkgJson.workspaces)) {
 		pkgJson.workspaces = Array.from(
 			new Set([...pkgJson.workspaces, ...required]),
@@ -794,31 +848,69 @@ async function updatePackageJson(cwd: string): Promise<void> {
 	await fs.writeJson(pkgJsonPath, pkgJson, { spaces: 2 });
 }
 
-// Update scaffolded app tsConfig to extend the typescript config of the root workspace
+/**
+ * Writes the root tsconfig.json containing the base settings and path aliases.
+ * Also patches the example app's tsconfig if it was scaffolded.
+ */
 async function updateTsConfig(cwd: string, scope: string): Promise<void> {
-	const tsConfigPath = path.join(cwd, "apps/example-app/tsconfig.json");
 	const { default: fs } = await import("fs-extra");
-	if (!(await pathExists(tsConfigPath))) return;
-	const tsConfig = await fs.readJson(tsConfigPath);
-	tsConfig.extends = "../../tsconfig.base.json";
-	const currentPaths = tsConfig.compilerOptions?.paths ?? {};
-	tsConfig.compilerOptions = {
-		...(tsConfig.compilerOptions ?? {}),
-		paths: {
-			...currentPaths,
-			"@/*": ["./*"],
-			[`@${scope}/*`]: ["../../packages/*"],
-		},
-	};
-	const includeEntries: string[] = Array.isArray(tsConfig.include)
-		? tsConfig.include
-		: [];
-	const requiredIncludes = [
-		"../../packages/**/*.ts",
-		"../../packages/**/*.tsx",
-	];
-	tsConfig.include = Array.from(
-		new Set([...includeEntries, ...requiredIncludes]),
+
+	// Write base config directly to the root tsconfig.json
+	await writeJson(
+		path.join(cwd, "tsconfig.json"),
+		rootTsConfigBase(scope),
 	);
-	await fs.writeJson(tsConfigPath, tsConfig, { spaces: 2 });
+
+	// Remove tsconfig.base.json if created by create-nx-workspace to avoid duplicate configs
+	const legacyBase = path.join(cwd, "tsconfig.base.json");
+	if (await pathExists(legacyBase)) {
+		await fs.remove(legacyBase);
+	}
+
+	// ── 3. Patch the example app tsconfig (if it was scaffolded) ─────────────
+	for (const appTsConfigRel of [
+		"apps/example-app/tsconfig.json",
+		"apps/example-app/tsconfig.app.json",
+	]) {
+		const tsConfigPath = path.join(cwd, appTsConfigRel);
+		if (!(await pathExists(tsConfigPath))) continue;
+
+		const hasSrcDir = await pathExists(path.join(cwd, "apps/example-app/src"));
+		const generated = appTsConfig({ scope, framework: "nextjs", hasSrcDir });
+
+		const existing = await fs.readJson(tsConfigPath);
+		const merged = {
+			...existing,
+			...generated,
+			compilerOptions: {
+				...(existing.compilerOptions ?? {}),
+				...(generated as { compilerOptions: object }).compilerOptions,
+			},
+		};
+		await fs.writeJson(tsConfigPath, merged, { spaces: 2 });
+		break;
+	}
+}
+
+/**
+ * Scaffolds the packages/typescript workspace package.
+ * This is a private, never-built package that owns all shared tsconfig presets.
+ * Other packages extend from "@scope/typescript/tsconfig.*.json".
+ */
+async function writeTypescriptPackage(
+	cwd: string,
+	scope: string,
+): Promise<void> {
+	const pkgDir = path.join(cwd, "tooling", "typescript");
+	await ensureDir(pkgDir);
+	// package.json — makes it a proper workspace package
+	await writeJson(
+		path.join(pkgDir, "package.json"),
+		typescriptPackageJson(scope),
+	);
+	// tsconfig presets
+	const presets = typescriptPresets();
+	for (const [filename, content] of Object.entries(presets)) {
+		await writeJson(path.join(pkgDir, filename), content);
+	}
 }

@@ -36,7 +36,12 @@ export async function listCommand(): Promise<void> {
 	}
 
 	// ─── Barrel export check ───────────────────────────────────────────────────
-	const barrelPath = path.join(uiPkgDir, "index.ts");
+	const indexTsxPath = path.join(uiPkgDir, "index.tsx");
+	const indexTsPath = path.join(uiPkgDir, "index.ts");
+	const barrelPath = (await pathExists(indexTsxPath))
+		? indexTsxPath
+		: indexTsPath;
+
 	let barrelContent = "";
 	if (await pathExists(barrelPath)) {
 		barrelContent = await fs.readFile(barrelPath, "utf-8");

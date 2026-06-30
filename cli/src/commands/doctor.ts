@@ -126,7 +126,11 @@ export async function doctorCommand(): Promise<void> {
 
 	// ─── 4. TypeScript build setup ────────────────────────────────────────────
 	const pkgJsonPath = path.join(uiPkgDir, "package.json");
-	const barrelPath = path.join(uiPkgDir, "index.ts");
+	const indexTsxPath = path.join(uiPkgDir, "index.tsx");
+	const indexTsPath = path.join(uiPkgDir, "index.ts");
+	const barrelPath = (await pathExists(indexTsxPath))
+		? indexTsxPath
+		: indexTsPath;
 
 	if (await pathExists(pkgJsonPath)) {
 		try {
@@ -243,7 +247,7 @@ export async function doctorCommand(): Promise<void> {
 	} else {
 		// Auto-fix: append missing exports
 		const newLines = missing
-			.map((c) => `export * from "./components/ui/${c}";`)
+			.map((c) => `export * from "./components/ui/${c}.js";`)
 			.join("\n");
 		const updated = barrelContent.endsWith("\n")
 			? barrelContent + newLines + "\n"
@@ -313,7 +317,7 @@ export async function doctorCommand(): Promise<void> {
 				fixes.length > 0
 					? [
 							{
-								cmd: "index.ts updated",
+								cmd: `${path.basename(barrelPath)} updated`,
 								comment: "barrel exports were fixed automatically",
 							},
 						]

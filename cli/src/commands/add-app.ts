@@ -9,6 +9,7 @@ import {
 	runInteractive,
 } from "../exec.js";
 import { loadConfig, resolveScope, scopedPackageName } from "../config.js";
+import { appTsConfig } from "../tsconfigs.js";
 import {
 	requireMonorepoRoot,
 	MonorepoRootNotFoundError,
@@ -198,6 +199,9 @@ export async function addAppCommand(options: AddAppOptions): Promise<void> {
 		await patchConfig(framework, appDir, uiPkgName, scope);
 	});
 
+	// Update the root solution tsconfig.json to reference the new app
+	await updateRootSolution(workspaceRoot);
+
 	printSuccess({
 		title: `apps/${appName} created`,
 		commands: [
@@ -220,6 +224,33 @@ export async function addAppCommand(options: AddAppOptions): Promise<void> {
 				: []),
 		],
 	});
+}
+
+/** Keeps the root solution tsconfig.json in sync after adding a package or app. */
+async function updateRootSolution(workspaceRoot: string): Promise<void> {
+	const { default: fs } = await import("fs-extra");
+	const solutionPath = path.join(workspaceRoot, "tsconfig.json");
+	if (!(await pathExists(solutionPath))) return;
+	try {
+		const solution = await fs.readJson(solutionPath) as {
+			files?: string[];
+			references?: Array<{ path: string }>;
+		};
+		// Re-read actual directories to build a fresh reference list
+		const refs: Array<{ path: string }> = [];
+		for (const dir of ["packages", "apps"]) {
+			const fullDir = path.join(workspaceRoot, dir);
+			if (!(await pathExists(fullDir))) continue;
+			const entries = await fs.readdir(fullDir);
+			for (const e of entries) {
+				const hasTsCfg = await pathExists(path.join(fullDir, e, "tsconfig.json"));
+				if (hasTsCfg) refs.push({ path: `./${dir}/${e}` });
+			}
+		}
+		solution.files = [];
+		solution.references = refs;
+		await fs.writeJson(solutionPath, solution, { spaces: 2 });
+	} catch { /* non-fatal — solution file will be slightly stale */ }
 }
 
 // ─── CLI runner ───────────────────────────────────────────────────────────────
@@ -250,6 +281,7 @@ async function scaffoldViaCli(
 				{ cwd: appsDir },
 			);
 			break;
+
 		case "vite":
 			await runInteractive(
 				pmx(pm),
@@ -257,29 +289,33 @@ async function scaffoldViaCli(
 				{ cwd: appsDir },
 			);
 			break;
+
 		case "remix":
 			await runInteractive(
 				pmx(pm),
-				pmxArgs(pm, "create-remix@latest", [appName, "--yes"]),
+				pmxArgs(pm, "create-remix@latest", [appName, "--no-git-init", "--no-install"]),
 				{ cwd: appsDir },
 			);
 			break;
+
 		case "expo":
 			await runInteractive(
 				pmx(pm),
-				pmxArgs(pm, "create-expo-app@latest", [
-					appName,
-					"--template",
-					"blank-typescript",
-					"--no-install",
-				]),
+				pmxArgs(pm, "create-expo-app@latest", [appName, "--template", "blank-typescript"]),
 				{ cwd: appsDir },
 			);
 			break;
+
+		default:
+			await runInteractive(
+				pmx(pm),
+				pmxArgs(pm, `create-${framework}@latest`, [appName]),
+				{ cwd: appsDir },
+			);
 	}
 }
 
-// ─── Add UI package dep ───────────────────────────────────────────────────────
+// ─── UI dependency wiring ─────────────────────────────────────────────────────
 
 async function addUiDependency(
 	appDir: string,
@@ -287,22 +323,18 @@ async function addUiDependency(
 	pm: string,
 	scope: string,
 ): Promise<void> {
-	const pkgJsonPath = path.join(appDir, "package.json");
 	const { default: fs } = await import("fs-extra");
-	if (!(await pathExists(pkgJsonPath))) {
-		throw new Error(
-			`package.json not found in ${appDir} — did the CLI scaffold succeed?`,
-		);
-	}
-	const pkgJson = await fs.readJson(pkgJsonPath);
-	pkgJson.dependencies = {
-		...pkgJson.dependencies,
+	const pkgPath = path.join(appDir, "package.json");
+	if (!(await pathExists(pkgPath))) return;
+	const pkg = await fs.readJson(pkgPath);
+	pkg.dependencies = {
+		...pkg.dependencies,
 		[scopedPackageName(scope, uiPkgName)]: pmWorkspaceProtocol(pm),
 	};
-	await fs.writeJson(pkgJsonPath, pkgJson, { spaces: 2 });
+	await fs.writeJson(pkgPath, pkg, { spaces: 2 });
 }
 
-// ─── Config patching ──────────────────────────────────────────────────────────
+// ─── Per-framework post-scaffold patching ────────────────────────────────────
 
 async function patchConfig(
 	framework: string,
@@ -333,67 +365,51 @@ async function patchNextConfig(
 ): Promise<void> {
 	const { default: fs } = await import("fs-extra");
 	const uiPackageName = scopedPackageName(scope, uiPkgName);
-	for (const cfgFile of [
-		"next.config.ts",
-		"next.config.js",
-		"next.config.mjs",
-	]) {
+
+	// Patch next.config to add transpilePackages
+	for (const cfgFile of ["next.config.ts", "next.config.mjs", "next.config.js"]) {
 		const cfgPath = path.join(appDir, cfgFile);
 		if (!(await pathExists(cfgPath))) continue;
 		let src = await fs.readFile(cfgPath, "utf-8");
-		if (src.includes("transpilePackages")) {
-			if (!src.includes(uiPackageName)) {
-				src = src.replace(
-					/transpilePackages:\s*\[/,
-					`transpilePackages: ["${uiPackageName}", `,
-				);
-			}
-		} else {
+		if (!src.includes("transpilePackages")) {
 			src = src.replace(
-				/(const nextConfig[^=]*=\s*\{)/,
-				`$1\n  transpilePackages: ["${uiPackageName}"],`,
+				/const nextConfig[^=]*=\s*\{/,
+				`const nextConfig = {\n  transpilePackages: ["${uiPackageName}"],`,
 			);
+			await fs.writeFile(cfgPath, src, "utf-8");
 		}
-		await fs.writeFile(cfgPath, src, "utf-8");
 		break;
 	}
+
+	// Inject CSS import into root layout
 	for (const layoutRel of [
 		"src/app/layout.tsx",
-		"app/layout.tsx",
 		"src/app/layout.jsx",
+		"app/layout.tsx",
+		"app/layout.jsx",
 	]) {
 		const layoutPath = path.join(appDir, layoutRel);
 		if (!(await pathExists(layoutPath))) continue;
 		let src = await fs.readFile(layoutPath, "utf-8");
 		if (!src.includes(uiPackageName)) {
 			src = src.replace(
-				/((?:^import[^\n]+\n)+)/m,
-				`$1import "${uiPackageName}/styles/globals.css";\n`,
+				/^(import\s)/m,
+				`import "${uiPackageName}/styles/globals.css";\n$1`,
 			);
 			await fs.writeFile(layoutPath, src, "utf-8");
 		}
 		break;
 	}
-	for (const cssRel of ["src/app/globals.css", "app/globals.css"]) {
-		const cssPath = path.join(appDir, cssRel);
-		if (!(await pathExists(cssPath))) continue;
-		let css = await fs.readFile(cssPath, "utf-8");
-		if (!css.includes("@source")) {
-			css = `/* Ensure Tailwind scans this app's source files */\n@import "${uiPackageName}/styles/globals.css";\n\n${css}`;
-			await fs.writeFile(cssPath, css, "utf-8");
-		}
-		break;
-	}
-	await patchAppTsConfig(appDir, scope);
+
+	await patchAppTsConfig(appDir, scope, "nextjs");
 }
 
-async function patchViteConfig(
-	appDir: string,
-	uiPkgName: string,
-	scope: string,
-): Promise<void> {
+/**
+ * Shared Tailwind v4 vite config injection.
+ * Used by both vite and remix (both are Vite-based).
+ */
+async function injectTailwindV4IntoViteConfig(appDir: string): Promise<void> {
 	const { default: fs } = await import("fs-extra");
-	const uiPackageName = scopedPackageName(scope, uiPkgName);
 	for (const cfgFile of ["vite.config.ts", "vite.config.js"]) {
 		const cfgPath = path.join(appDir, cfgFile);
 		if (!(await pathExists(cfgPath))) continue;
@@ -405,6 +421,8 @@ async function patchViteConfig(
 		}
 		break;
 	}
+
+	// Add @tailwindcss/vite devDependency
 	const pkgPath = path.join(appDir, "package.json");
 	if (await pathExists(pkgPath)) {
 		const pkg = await fs.readJson(pkgPath);
@@ -414,6 +432,18 @@ async function patchViteConfig(
 		};
 		await fs.writeJson(pkgPath, pkg, { spaces: 2 });
 	}
+}
+
+async function patchViteConfig(
+	appDir: string,
+	uiPkgName: string,
+	scope: string,
+): Promise<void> {
+	const { default: fs } = await import("fs-extra");
+	const uiPackageName = scopedPackageName(scope, uiPkgName);
+
+	await injectTailwindV4IntoViteConfig(appDir);
+
 	for (const mainRel of ["src/main.tsx", "src/main.jsx", "src/main.ts"]) {
 		const mainPath = path.join(appDir, mainRel);
 		if (!(await pathExists(mainPath))) continue;
@@ -424,7 +454,8 @@ async function patchViteConfig(
 		}
 		break;
 	}
-	await patchAppTsConfig(appDir, scope);
+
+	await patchAppTsConfig(appDir, scope, "vite");
 }
 
 async function patchRemixConfig(
@@ -434,26 +465,9 @@ async function patchRemixConfig(
 ): Promise<void> {
 	const { default: fs } = await import("fs-extra");
 	const uiPackageName = scopedPackageName(scope, uiPkgName);
-	for (const cfgFile of ["vite.config.ts", "vite.config.js"]) {
-		const cfgPath = path.join(appDir, cfgFile);
-		if (!(await pathExists(cfgPath))) continue;
-		let src = await fs.readFile(cfgPath, "utf-8");
-		if (!src.includes("@tailwindcss/vite") && !src.includes("tailwindcss")) {
-			src = `import tailwindcss from "@tailwindcss/vite";\n${src}`;
-			src = src.replace(/plugins:\s*\[/, `plugins: [tailwindcss(), `);
-			await fs.writeFile(cfgPath, src, "utf-8");
-		}
-		break;
-	}
-	const pkgPath = path.join(appDir, "package.json");
-	if (await pathExists(pkgPath)) {
-		const pkg = await fs.readJson(pkgPath);
-		pkg.devDependencies = {
-			...pkg.devDependencies,
-			"@tailwindcss/vite": "^4.0.0",
-		};
-		await fs.writeJson(pkgPath, pkg, { spaces: 2 });
-	}
+
+	await injectTailwindV4IntoViteConfig(appDir);
+
 	for (const rootRel of ["app/root.tsx", "app/root.jsx"]) {
 		const rootPath = path.join(appDir, rootRel);
 		if (!(await pathExists(rootPath))) continue;
@@ -467,7 +481,8 @@ async function patchRemixConfig(
 		}
 		break;
 	}
-	await patchAppTsConfig(appDir, scope);
+
+	await patchAppTsConfig(appDir, scope, "remix");
 }
 
 async function patchExpoConfig(appDir: string, scope: string): Promise<void> {
@@ -522,37 +537,58 @@ module.exports = {
 		}
 		break;
 	}
-	await patchAppTsConfig(appDir, scope);
+	await patchAppTsConfig(appDir, scope, "expo");
 }
 
-async function patchAppTsConfig(appDir: string, scope: string): Promise<void> {
+/**
+ * Rewrites an app's tsconfig.json to extend the correct tooling/ preset.
+ * Falls back to ../../tsconfig.base.json if tooling/ doesn't exist yet
+ * (pre-migration workspaces). Run `nx-factory-cli migrate` to add tooling/.
+ */
+async function patchAppTsConfig(
+	appDir: string,
+	scope: string,
+	framework: string = "nextjs",
+): Promise<void> {
 	const { default: fs } = await import("fs-extra");
 	const tsConfigPath = path.join(appDir, "tsconfig.json");
 	if (!(await pathExists(tsConfigPath))) return;
-	const tsConfig = await fs.readJson(tsConfigPath);
-	const usesSrcDir = await pathExists(path.join(appDir, "src"));
-	tsConfig.extends = "../../tsconfig.base.json";
-	const currentPaths = tsConfig.compilerOptions?.paths ?? {};
-	tsConfig.compilerOptions = {
-		...(tsConfig.compilerOptions ?? {}),
-		paths: {
-			...currentPaths,
-			"@/*": [usesSrcDir ? "./src/*" : "./*"],
-			[`@${scope}/*`]: ["../../packages/*"],
+
+	const hasSrcDir = await pathExists(path.join(appDir, "src"));
+	const fw = (["nextjs", "vite", "remix", "expo"].includes(framework)
+		? framework
+		: "vite") as "nextjs" | "vite" | "remix" | "expo";
+
+	// Check if tooling/typescript/ or packages/typescript/ exists — it does in workspaces created with
+	// the current CLI. Older workspaces should run `nx-factory-cli migrate` first.
+	const workspaceRoot = path.resolve(appDir, "../..");
+	const toolingExists =
+		(await pathExists(path.join(workspaceRoot, "tooling", "typescript", "tsconfig.internal.json"))) ||
+		(await pathExists(path.join(workspaceRoot, "packages", "typescript", "tsconfig.internal.json")));
+	const hasBase = await pathExists(path.join(workspaceRoot, "tsconfig.base.json"));
+	const rootTsConfigName = hasBase ? "tsconfig.base.json" : "tsconfig.json";
+
+	const generated = appTsConfig({
+		scope,
+		framework: fw,
+		hasSrcDir,
+		typescriptPkgExists: toolingExists,
+		rootTsConfigName,
+	});
+
+	const existing = await fs.readJson(tsConfigPath);
+	const merged = {
+		...existing,
+		...generated,
+		compilerOptions: {
+			...(existing.compilerOptions ?? {}),
+			...(generated as { compilerOptions: object }).compilerOptions,
 		},
 	};
-	const includeEntries: string[] = Array.isArray(tsConfig.include)
-		? tsConfig.include
-		: [];
-	tsConfig.include = Array.from(
-		new Set([
-			...includeEntries,
-			"../../packages/**/*.ts",
-			"../../packages/**/*.tsx",
-		]),
-	);
-	await fs.writeJson(tsConfigPath, tsConfig, { spaces: 2 });
+	await fs.writeJson(tsConfigPath, merged, { spaces: 2 });
 }
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function frameworkCliName(framework: string): string {
 	switch (framework) {

@@ -1,6 +1,6 @@
 ---
 title: update
-description: Update installed shadcn components.
+description: Update installed shadcn/ui components to their latest templates.
 ---
 
 ## Usage
@@ -14,18 +14,36 @@ nx-factory-cli update --dry-run
 
 ## Arguments
 
-| Argument | Description |
-| --- | --- |
-| `[components...]` | Specific components to update (default: all) |
+Pass specific component names to update only those components. Run with no arguments to update all installed components.
 
 ## Options
 
 | Option | Description |
-| --- | --- |
-| `-y, --yes` | Skip confirmation |
-| `--dry-run` | Preview changes only |
+|---|---|
+| `-y, --yes` | Skip the per-component confirmation prompts |
+| `--dry-run` | Preview what would be updated without writing anything |
 
-## What It Does
+## What it does
 
-- Updates selected or all shadcn components
-- Applies component template refreshes
+Runs `shadcn@latest add --overwrite <component>` for each target component inside `packages/ui`. This pulls the latest component template from the shadcn/ui registry and overwrites the existing file.
+
+## When to run it
+
+- After a major shadcn/ui release that changes component APIs
+- When a component has known accessibility or styling fixes upstream
+- As part of a scheduled dependency update routine
+
+## Warning
+
+`update` overwrites the component file. Any local customisations made directly to the component source (rather than through composition) will be lost. Consider wrapping components instead of modifying them directly to survive updates:
+
+```tsx
+// ✅ Survives updates — your customisation is in a wrapper
+import { Button as ShadcnButton } from "@workspace/ui/components/button";
+export function Button(props) {
+  return <ShadcnButton className="my-custom-class" {...props} />;
+}
+
+// ⚠️  Lost on update — direct modification
+// packages/ui/components/ui/button.tsx
+```

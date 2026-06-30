@@ -1,6 +1,6 @@
 ---
 title: doctor
-description: Validate workspace health and fix common issues.
+description: Validate workspace health and auto-fix barrel export issues.
 ---
 
 ## Usage
@@ -9,8 +9,12 @@ description: Validate workspace health and fix common issues.
 nx-factory-cli doctor
 ```
 
-## What It Does
+## What it checks
 
-- Runs health checks on workspace structure and generated files
-- Detects common issues (including barrel/export issues)
-- Applies safe auto-fixes where supported
+- **tsconfig inheritance** — all packages and apps extend `../../tsconfig.base.json`
+- **@scope/* paths** — `tsconfig.base.json` has the correct paths mapping
+- **Barrel exports** — `packages/ui/index.tsx` exports all installed shadcn/ui components
+- **package.json exports** — the UI package has a well-formed `exports` field
+- **nx-factory.config.json** — present and readable
+
+Auto-fixes barrel export issues when found. Reports all other issues without modifying files.

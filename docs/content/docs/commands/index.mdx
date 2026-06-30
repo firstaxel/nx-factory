@@ -1,21 +1,21 @@
 ---
 title: Commands
-description: Individual command docs for nx-factory-cli CLI.
-icon: ListChecks
+description: Every nx-factory-cli command — what it does, what it writes, and how to use it.
 ---
 
-Use these pages for command-specific options, behavior, and examples.
+nx-factory-cli exposes one command per concern. All commands are interactive by default and support `--yes` to skip prompts and `--dry-run` to preview changes without writing anything.
 
-<Cards>
-  <Card title="init" href="/docs/commands/init" />
-  <Card title="add-app" href="/docs/commands/add-app" />
-  <Card title="add-auth" href="/docs/commands/add-auth" />
-  <Card title="add-component" href="/docs/commands/add-component" />
-  <Card title="remove-component" href="/docs/commands/remove-component" />
-  <Card title="update" href="/docs/commands/update" />
-  <Card title="list" href="/docs/commands/list" />
-  <Card title="doctor" href="/docs/commands/doctor" />
-  <Card title="add-lib" href="/docs/commands/add-lib" />
-  <Card title="add-storybook" href="/docs/commands/add-storybook" />
-  <Card title="publish" href="/docs/commands/publish" />
-</Cards>
+| Command | Purpose |
+|---|---|
+| [`init`](/docs/commands/init) | Bootstrap a new Nx monorepo |
+| [`add-app`](/docs/commands/add-app) | Add a new app via its official CLI |
+| [`add-auth`](/docs/commands/add-auth) | Scaffold `packages/auth` with a provider |
+| [`add-component`](/docs/commands/add-component) | Add shadcn/ui components to the shared UI |
+| [`add-lib`](/docs/commands/add-lib) | Scaffold a generic shared library |
+| [`add-storybook`](/docs/commands/add-storybook) | Add Storybook to the shared UI package |
+| [`remove-component`](/docs/commands/remove-component) | Remove shadcn/ui components |
+| [`update`](/docs/commands/update) | Update installed shadcn/ui components |
+| [`list`](/docs/commands/list) | List installed components and their usage |
+| [`doctor`](/docs/commands/doctor) | Validate and auto-fix workspace health |
+| [`publish`](/docs/commands/publish) | Build and publish the shared UI package |
+| [`migrate`](/docs/commands/migrate) | Migrate an existing workspace to the latest config |

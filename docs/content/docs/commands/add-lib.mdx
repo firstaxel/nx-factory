@@ -1,6 +1,6 @@
 ---
 title: add-lib
-description: Scaffold a shared library in packages/.
+description: Scaffold a typed shared library in packages/ — choose the type and whether it's internal or will be published to npm.
 ---
 
 ## Usage
@@ -15,13 +15,66 @@ nx-factory-cli add-lib --dry-run
 ## Options
 
 | Option | Description |
-| --- | --- |
-| `-n, --name <n>` | Library name |
+|---|---|
+| `-n, --name <n>` | Library name (lives at `packages/<n>`) |
 | `-t, --type <type>` | `utils`, `hooks`, `config`, `types`, `api` |
-| `-y, --yes` | Skip prompts and use defaults |
-| `--dry-run` | Preview changes only |
+| `-y, --yes` | Skip prompts |
+| `--dry-run` | Preview without writing |
 
-## What It Does
+## Interactive prompts
 
-- Creates new package under `packages/`
-- Adds TypeScript/build scaffolding for workspace usage
+1. **Library name** — becomes `@scope/<n>`
+2. **Library type** — determines the seed file content
+3. **Package visibility** — `internal` or `public`
+4. **Package manager** — only asked if not auto-detected
+
+## Library types
+
+| Type | Seed content | React? |
+|---|---|---|
+| `utils` | `noop()`, `sleep()` | No |
+| `hooks` | `useNoop()` stub | Yes (jsx + DOM) |
+| `config` | `config` const with `env` | No |
+| `types` | `ID` type, `Timestamps` interface | No |
+| `api` | `apiFetch<T>()` helper | No |
+
+## Internal vs public
+
+The visibility answer shapes both `package.json` and `tsconfig.json`:
+
+**Internal** (`private: true`):
+- `private: true` in package.json
+- Self-referencing path alias in tsconfig so within-package imports can use `@scope/my-lib` instead of `./`
+- No `publishConfig`, no `files`
+
+**Public** (to be published to npm):
+- No `private` field
+- `files: ["dist"]`
+- `publishConfig: { access: "public" }`
+- `stripInternal: true` in tsconfig — removes `@internal` JSDoc annotations from `.d.ts` output
+
+## What gets created
+
+```
+packages/<name>/
+├── package.json     ← exports, scripts, visibility config
+├── tsconfig.json    ← extends ../../tsconfig.base.json, composite: true
+└── index.ts         ← seed content based on type
+```
+
+## Using the library in an app
+
+```json
+// apps/my-app/package.json
+{
+  "dependencies": {
+    "@my-scope/my-lib": "workspace:*"
+  }
+}
+```
+
+```ts
+import { apiFetch } from "@my-scope/my-lib";
+```
+
+Run `pnpm install` from the workspace root after adding the dependency.

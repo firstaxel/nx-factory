@@ -1,17 +1,33 @@
 import path from "path";
 import { writeFile, ensureDir } from "../../../files.js";
 import { scopedPackageName } from "../../../config.js";
-import type { AuthPackageScaffolder, AuthPackageOptions } from "../types.js";
+import type { AuthPackageScaffolder, AuthPackageOptions, AppFramework } from "../types.js";
+
+/**
+ * Returns only the Clerk SDK packages actually needed by the detected frameworks.
+ * Avoids installing @clerk/remix into a Next.js-only workspace, etc.
+ */
+function clerkDepsForFrameworks(frameworks: AppFramework[]): Record<string, string> {
+	const deps: Record<string, string> = {};
+	const set = new Set(frameworks);
+	// @clerk/nextjs covers Next.js server + client
+	if (set.has("nextjs")) deps["@clerk/nextjs"] = "latest";
+	// @clerk/react for Vite SPAs
+	if (set.has("vite")) deps["@clerk/react"] = "latest";
+	// @clerk/remix for Remix
+	if (set.has("remix")) deps["@clerk/remix"] = "latest";
+	// @clerk/expo for React Native
+	if (set.has("expo")) deps["@clerk/expo"] = "latest";
+	// If no frameworks detected yet fall back to the most common one
+	if (Object.keys(deps).length === 0) deps["@clerk/nextjs"] = "latest";
+	return deps;
+}
 
 export const clerkScaffolder: AuthPackageScaffolder = {
 	label: "Clerk",
 
-	dependencies: {
-		"@clerk/nextjs": "latest",
-		"@clerk/clerk-react": "latest",
-		"@clerk/remix": "latest",
-		"@clerk/clerk-expo": "latest",
-	},
+	// Static base deps — framework-specific ones are added in scaffold()
+	dependencies: {},
 
 	devDependencies: {
 		"@types/react": "^19.0.0",
@@ -24,14 +40,24 @@ export const clerkScaffolder: AuthPackageScaffolder = {
 
 	async scaffold(pkgDir: string, opts: AuthPackageOptions): Promise<void> {
 		const authPackageName = scopedPackageName(opts.scope, "auth");
+		const frameworkDeps = clerkDepsForFrameworks(opts.frameworks);
+
+		// Merge framework-specific deps into package.json (base already written)
+		const { default: fs } = await import("fs-extra");
+		const pkgPath = path.join(pkgDir, "package.json");
+		if (await fs.pathExists(pkgPath)) {
+			const pkg = await fs.readJson(pkgPath);
+			pkg.dependencies = { ...pkg.dependencies, ...frameworkDeps };
+			await fs.writeJson(pkgPath, pkg, { spaces: 2 });
+		}
 
 		await ensureDir(path.join(pkgDir, "."));
 
-		// ── /index.ts ──────────────────────────────────────────────────────────
+		// ── index.ts ────────────────────────────────────────────────────────────
 		await writeFile(
 			path.join(pkgDir, "index.ts"),
 			`/**
- * ${authPackageName} — Clerk latest setup.
+ * ${authPackageName} — Clerk auth package.
  *
  * Prefer sub-path imports for tree-shaking:
  *   import { auth, currentUser }  from "${authPackageName}/server"
@@ -54,77 +80,40 @@ export {
 `,
 		);
 
-		// ── /server.ts ─────────────────────────────────────────────────────────
+		// ── server.ts ──────────────────────────────────────────────────────────
 		await writeFile(
 			path.join(pkgDir, "server.ts"),
 			`/**
  * Clerk v6 — server-side helpers.
  * Import in Next.js Server Components, Route Handlers, or Middleware.
- *
- * @example Next.js App Router
- *   import { auth, currentUser } from "${authPackageName}/server";
- *
- *   export default async function Page() {
- *     const { userId } = await auth();
- *     const user = await currentUser();
- *   }
- *
- * @example Route Handler / Remix loader
- *   import { getAuth } from "${authPackageName}/server";
- *   const { userId } = getAuth(req);   // Express / Remix: sync helper
  */
-
-// auth() — returns Promise<{ userId, sessionId, sessionClaims, ... }>
 export { auth } from "@clerk/nextjs/server";
-
-// currentUser() — returns full User object or null
 export { currentUser } from "@clerk/nextjs/server";
-
-// clerkClient() — factory function (Clerk v6 changed from singleton to factory)
 export { clerkClient } from "@clerk/nextjs/server";
-
-// getAuth() — for Express/Remix/Node environments (sync, takes Request)
 export { getAuth } from "@clerk/nextjs/server";
-
-// Type helpers
-export type {
-  User,
-  Organization,
-  Session,
-} from "@clerk/nextjs/server";
+export type { User, Organization, Session } from "@clerk/nextjs/server";
 `,
 		);
 
-		// ── /client.ts ─────────────────────────────────────────────────────────
+		// ── client.ts ──────────────────────────────────────────────────────────
 		await writeFile(
 			path.join(pkgDir, "client.ts"),
 			`/**
  * Clerk v6 — client-side hooks and pre-built components.
  * Use in React Client Components, Vite SPAs, or Expo apps.
- *
- * @example
- *   import { useAuth, useUser, UserButton } from "${authPackageName}/client";
- *
- *   function Header() {
- *     const { isSignedIn } = useAuth();
- *     return isSignedIn ? <UserButton /> : <SignInButton />;
- *   }
  */
 "use client";
 
-// Hooks
 export {
   useAuth,
   useUser,
   useClerk,
   useSession,
   useOrganization,
-  useOrganizationList,
   useSignIn,
   useSignUp,
 } from "@clerk/nextjs";
 
-// Pre-built UI components
 export {
   ClerkProvider,
   SignIn,
@@ -134,40 +123,28 @@ export {
   SignOutButton,
   UserButton,
   UserProfile,
-  OrganizationProfile,
-  OrganizationSwitcher,
-  CreateOrganization,
+  SignedIn,
+  SignedOut,
+  Protect,
 } from "@clerk/nextjs";
-
-// Render helpers
-export { SignedIn, SignedOut, Protect } from "@clerk/nextjs";
 `,
 		);
 
-		// ── /middleware.ts ─────────────────────────────────────────────────────
+		// ── middleware.ts ───────────────────────────────────────────────────────
 		await writeFile(
 			path.join(pkgDir, "middleware.ts"),
 			`/**
  * Clerk v6 middleware for Next.js.
  *
- * Clerk v6 uses clerkMiddleware() — authMiddleware() was removed.
- *
  * Quick start — copy into apps/<your-app>/middleware.ts:
  *
  *   import type { NextRequest } from "next/server";
- *   import { authMiddleware, middlewareConfig } from "${authPackageName}/middleware";
+ *   import { authMiddleware, middlewareConfig } from "${authPackageName}/next";
  *
- *   export default function middleware(request: NextRequest) {
- *     return authMiddleware(request);
+ *   export default function middleware(req: NextRequest) {
+ *     return authMiddleware(req);
  *   }
- *
  *   export const config = middlewareConfig;
- *
- * Custom public routes:
- *
- *   import { buildMiddleware } from "${authPackageName}/middleware";
- *   export default buildMiddleware(["/", "/about(.*)", "/marketing(.*)"]);
- *   export { middlewareConfig as config } from "${authPackageName}/middleware";
  */
 import {
   clerkMiddleware,
@@ -177,36 +154,18 @@ import {
 
 export const middlewareConfig = {
   matcher: [
-    // Skip Next.js internals and all static files
     "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
     "/(api|trpc)(.*)",
   ],
 };
 
-const defaultPublicPaths = [
-  "/",
-  "/sign-in(.*)",
-  "/sign-up(.*)",
-  "/api/webhooks(.*)",
-];
+const defaultPublicPaths = ["/", "/sign-in(.*)", "/sign-up(.*)", "/api/webhooks(.*)"];
 
-/** Default middleware — protects all routes except the ones above */
-export const authMiddleware = clerkMiddleware(
-  async (auth, request) => {
-    const isPublic = createRouteMatcher(defaultPublicPaths);
-    if (!isPublic(request)) await auth.protect();
-  },
-);
+export const authMiddleware = clerkMiddleware(async (auth, request) => {
+  const isPublic = createRouteMatcher(defaultPublicPaths);
+  if (!isPublic(request)) await auth.protect();
+});
 
-/**
- * Build a middleware with custom public paths.
- *
- * @param publicPaths - Array of path patterns (supports wildcards with (.*))
- * @param options     - Extra Clerk middleware options (e.g. debug: true)
- *
- * @example
- *   export default buildMiddleware(["/", "/marketing(.*)", "/blog(.*)"]);
- */
 export function buildMiddleware(
   publicPaths: string[],
   options?: ClerkMiddlewareOptions,
@@ -219,15 +178,13 @@ export function buildMiddleware(
 `,
 		);
 
-		// ── .env.example ─────────────────────────────────────────────────────────
+		// ── .env.example ───────────────────────────────────────────────────────
 		await writeFile(
 			path.join(pkgDir, ".env.example"),
-			`# ─── Clerk v6 ────────────────────────────────────────────────────────────────
-# Get these from: https://dashboard.clerk.com → your app → API Keys
+			`# Clerk v6 — get from https://dashboard.clerk.com → your app → API Keys
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_REPLACE_ME
 CLERK_SECRET_KEY=sk_test_REPLACE_ME
 
-# Redirect URLs (optional — Clerk uses these if set)
 NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
 NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
 NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/dashboard
@@ -235,75 +192,34 @@ NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/dashboard
 `,
 		);
 
-		// ── README.md ─────────────────────────────────────────────────────────────
+		// ── README.md ───────────────────────────────────────────────────────────
 		await writeFile(
 			path.join(pkgDir, "README.md"),
 			`# ${authPackageName} — Clerk v6
 
 Shared authentication package powered by [Clerk](https://clerk.com) v6.
 
-> **Clerk v6 notes:** \`authMiddleware\` was removed — use \`clerkMiddleware\` (exported here as \`authMiddleware\` for compatibility). \`clerkClient\` is now a factory function, not a singleton.
+## Installed packages
+${Object.keys(frameworkDeps).map((d) => `- \`${d}\``).join("\n")}
 
-## Setup
+## Quick setup
 
-### 1. Copy env vars to your app
 \`\`\`bash
 cp packages/auth/.env.example apps/<your-app>/.env.local
-# Fill in keys from https://dashboard.clerk.com
 \`\`\`
 
-### 2. Add the dependency
-\`\`\`json
-{ "dependencies": { "${authPackageName}": "workspace:*" } }
-\`\`\`
-
-### 3. Wrap your root layout
 \`\`\`tsx
 // apps/<your-app>/app/layout.tsx
 import { ClerkProvider } from "${authPackageName}/client";
-
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <ClerkProvider>
-      <html><body>{children}</body></html>
-    </ClerkProvider>
-  );
+  return <ClerkProvider><html><body>{children}</body></html></ClerkProvider>;
 }
 \`\`\`
 
-### 4. Add the middleware
-\`\`\`ts
-// apps/<your-app>/middleware.ts
-import type { NextRequest } from "next/server";
-import { authMiddleware, middlewareConfig } from "${authPackageName}/next";
-
-export default function middleware(request: NextRequest) {
-  return authMiddleware(request);
-}
-
-export const config = middlewareConfig;
-\`\`\`
-
-### 5. Use in your pages
-\`\`\`tsx
-// Server component
-import { auth, currentUser } from "${authPackageName}/server";
-const { userId } = await auth();
-const user = await currentUser();
-
-// Client component
-"use client";
-import { useAuth, UserButton, SignedIn, SignedOut } from "${authPackageName}/client";
-const { isSignedIn } = useAuth();
-\`\`\`
-
-## API
-
-| Sub-path | Key exports |
+| Sub-path | Exports |
 |---|---|
 | \`${authPackageName}/server\` | \`auth()\`, \`currentUser()\`, \`clerkClient()\`, \`getAuth()\` |
-| \`${authPackageName}/client\` | \`useAuth\`, \`useUser\`, \`ClerkProvider\`, \`UserButton\`, \`SignedIn\`, \`SignedOut\` |
-| \`${authPackageName}/middleware\` | \`authMiddleware\`, \`buildMiddleware()\`, \`middlewareConfig\` |
+| \`${authPackageName}/client\` | \`useAuth\`, \`UserButton\`, \`ClerkProvider\`, \`SignedIn\`, \`SignedOut\` |
 | \`${authPackageName}/next\` | \`authMiddleware\`, \`buildMiddleware()\`, \`middlewareConfig\` |
 `,
 		);

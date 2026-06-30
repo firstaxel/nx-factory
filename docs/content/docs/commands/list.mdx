@@ -1,6 +1,6 @@
 ---
 title: list
-description: List installed shared UI components and usage.
+description: List all installed shadcn/ui components in the shared UI package and show where each one is used across apps.
 ---
 
 ## Usage
@@ -9,7 +9,29 @@ description: List installed shared UI components and usage.
 nx-factory-cli list
 ```
 
-## What It Does
+No options — it's a read-only command.
 
-- Lists installed shadcn/shared UI components
-- Shows usage context across workspace where available
+## What it shows
+
+For each installed shadcn/ui component in `packages/ui/components/ui/`:
+
+- The component name
+- Whether it's exported from the barrel (`index.tsx`)
+- Which apps in `apps/` import it (scanned by searching for the component name in each app's source)
+
+## Example output
+
+```
+  ─────────────────────────────────────────
+  Installed components in @workspace/ui
+
+  ─────────────────────────────────────────
+  │ button          ✓ exported   used in: dashboard, marketing
+  │ card            ✓ exported   used in: dashboard
+  │ dialog          ✓ exported   unused
+  │ input           ✓ exported   used in: dashboard
+  │ tooltip         ✗ missing from barrel
+  ─────────────────────────────────────────
+```
+
+If a component is installed but missing from the barrel export, run `nx-factory-cli doctor` to auto-fix it.

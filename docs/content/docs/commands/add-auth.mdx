@@ -1,34 +1,96 @@
 ---
 title: add-auth
-description: Scaffold shared auth package with provider templates.
+description: Scaffold packages/auth with a full auth setup for Clerk, Better Auth, or WorkOS — framework-aware and monorepo-native.
 ---
 
 ## Usage
 
 ```bash
 nx-factory-cli add-auth
-nx-factory-cli add-auth --provider better-auth
 nx-factory-cli add-auth --provider clerk
-nx-factory-cli add-auth --provider workos
-nx-factory-cli add-auth --app dashboard
-nx-factory-cli add-auth --app dashboard --framework nextjs
+nx-factory-cli add-auth --provider better-auth --app dashboard
+nx-factory-cli add-auth --provider workos --framework nextjs
 nx-factory-cli add-auth --dry-run
 ```
 
 ## Options
 
 | Option | Description |
-| --- | --- |
-| `-a, --app <name>` | Target app in `apps/` (CLI surface) |
+|---|---|
+| `-a, --app <n>` | Target a specific app in `apps/` |
 | `-p, --provider <provider>` | `clerk`, `better-auth`, `workos` |
-| `-f, --framework <framework>` | `nextjs`, `vite`, `remix`, `expo` (fallback when app detection is unclear) |
-| `-y, --yes` | Skip prompts and use defaults |
-| `--dry-run` | Preview changes only |
+| `-f, --framework <framework>` | Hint if framework detection is unclear |
+| `-y, --yes` | Skip prompts |
+| `--dry-run` | Preview without writing |
 
-## What It Does
+## Supported providers
 
-- Creates `packages/auth`
-- Generates provider templates
-- Exports `server`, `client`, `middleware`, `next`
-- Optionally wires selected apps with `@<scope>/auth`
-- Detects each app's framework so Next.js apps get Next-specific setup and non-Next apps get client-only guidance
+### Clerk
+
+Hosted auth UI with generous free tier. Zero-config for most apps.
+
+```ts
+import { auth, currentUser } from "@workspace/auth/server";
+import { useAuth, UserButton, ClerkProvider } from "@workspace/auth/client";
+import { authMiddleware, middlewareConfig } from "@workspace/auth/next";
+```
+
+**Framework-aware installs**: only installs `@clerk/nextjs` for Next.js workspaces, `@clerk/react` for Vite, `@clerk/remix` for Remix, `@clerk/expo` for Expo.
+
+### Better Auth
+
+Open-source, self-hosted, database-backed auth.
+
+```ts
+import { auth } from "@workspace/auth/server";           // server instance
+import { authClient, signIn, signOut } from "@workspace/auth/client"; // browser SDK
+import { authHandler } from "@workspace/auth/next";       // Next.js route handler
+```
+
+After scaffolding, configure the database adapter in `packages/auth/server.ts` and run:
+
+```bash
+npx better-auth migrate   # creates DB tables
+```
+
+### WorkOS AuthKit
+
+Enterprise SSO, SCIM, MFA — hosted AuthKit UI.
+
+```ts
+import { getUser, withAuth, workos } from "@workspace/auth/server";
+import { authMiddleware, middlewareConfig } from "@workspace/auth/next";
+```
+
+`@workos-inc/authkit-nextjs` is only installed for Next.js workspaces. Non-Next.js workspaces get `@workos-inc/node` for the universal server SDK.
+
+## What it creates
+
+```
+packages/auth/
+├── package.json          ← private, exports: ., /server, /client, /middleware, /next
+├── tsconfig.json         ← extends ../../tsconfig.base.json, react: true
+├── index.ts              ← re-exports server + client
+├── server.ts             ← server-side helpers
+├── client.ts             ← browser / React hooks
+├── middleware.ts         ← Next.js middleware (if Next.js detected)
+├── next.ts               ← Next.js adapter barrel
+├── .env.example          ← all required env vars
+└── README.md             ← quick-start guide for the chosen provider
+```
+
+## After scaffolding
+
+```bash
+# 1. Install the new packages
+pnpm install
+
+# 2. Copy env vars to your app
+cp packages/auth/.env.example apps/my-app/.env.local
+
+# 3. Build the auth package
+pnpm nx build @workspace/auth
+
+# 4. Better Auth only: run migrations
+npx better-auth migrate
+```

@@ -1,0 +1,70 @@
+---
+title: migrate
+description: Migrate an existing nx-factory-cli workspace to the latest configuration — targeted patches with backups.
+---
+
+## Usage
+
+```bash
+nx-factory-cli migrate
+nx-factory-cli migrate --yes
+nx-factory-cli migrate --dry-run
+```
+
+## Options
+
+| Option | Description |
+|---|---|
+| `-y, --yes` | Skip confirmation prompt |
+| `--dry-run` | Show what would change without writing anything |
+
+## When to run it
+
+Run `migrate` if your workspace was created with an older version of nx-factory-cli and is missing any of:
+
+- `tsconfig.base.json` at the workspace root
+- `uiPackageVisibility` in `nx-factory.config.json`
+- `composite: true` in package `tsconfig.json` files
+- Correct `extends: "../../tsconfig.base.json"` in app `tsconfig.json` files
+- `@scope/*` path alias in app tsconfigs
+
+The command will tell you exactly what it found before asking you to proceed.
+
+## What it analyses
+
+```
+✗  tsconfig.base.json missing — will create
+✗  UI package visibility not set — will prompt
+✗  Packages needing tsconfig migration: ui, auth
+✗  Apps needing tsconfig migration: dashboard, marketing
+✓  nx-factory.config.json present (v2.0.0)
+```
+
+## What it migrates
+
+**1. tsconfig.base.json** — If missing, writes a fresh one with `NodeNext` module resolution, strict settings, and the global `@scope/*` paths map.
+
+**2. UI package** — Updates `tsconfig.json` to extend the base and adds `composite: true`. Updates `package.json` with an `exports` field if missing, and sets `private: true` / `publishConfig` based on the visibility you choose.
+
+**3. Other packages in packages/** — Detects each package's existing settings (jsx, visibility from `private` field) and regenerates the `tsconfig.json` using the factory. Old tsconfigs that use `moduleResolution: bundler` are updated to `NodeNext` via the base inheritance.
+
+**4. App tsconfigs** — Regenerates each app's `tsconfig.json` to extend `../../tsconfig.base.json` with the correct framework-specific settings. Removes any `packages/**/*` entries from `include` (these cause slow builds and duplicate declaration errors — the `paths` alias handles resolution instead).
+
+**5. nx-factory.config.json** — Adds `uiPackageVisibility` and bumps the version field.
+
+## Backups
+
+Every file the migration touches is copied to `<file>.migration-backup` before being modified. Once you've verified everything builds correctly, delete them:
+
+```bash
+find . -name '*.migration-backup' -delete
+```
+
+## After migrating
+
+```bash
+pnpm install                         # pick up any dep changes
+pnpm nx run-many --target=build      # verify everything builds
+```
+
+If the build fails, check that all relative imports in your source files end with `.js` — `NodeNext` module resolution requires this in source `.ts` files.

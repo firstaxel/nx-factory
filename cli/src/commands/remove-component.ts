@@ -123,7 +123,12 @@ export async function removeComponentCommand(
 
 	// ─── Update barrel exports ─────────────────────────────────────────────────
 	if (removed.length > 0 && !opts.dryRun) {
-		const barrelPath = path.join(uiPkgDir, "index.ts");
+		const indexTsxPath = path.join(uiPkgDir, "index.tsx");
+		const indexTsPath = path.join(uiPkgDir, "index.ts");
+		const barrelPath = (await pathExists(indexTsxPath))
+			? indexTsxPath
+			: indexTsPath;
+
 		if (await pathExists(barrelPath)) {
 			let barrel = await fs.readFile(barrelPath, "utf-8");
 			for (const comp of removed) {

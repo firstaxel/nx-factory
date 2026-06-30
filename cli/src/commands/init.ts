@@ -295,10 +295,14 @@ export async function initCommand(options: InitOptions): Promise<void> {
 						},
 					]
 				: []),
-			{
-				cmd: `${pm} nx build ${scopedPackageName(scope, uiPkgName)}`,
-				comment: "build the UI package",
-			},
+			...(uiPackageVisibility === "public"
+				? [
+						{
+							cmd: `${pm} nx build ${scopedPackageName(scope, uiPkgName)}`,
+							comment: "build the UI package",
+						},
+					]
+				: []),
 		],
 		tips: [
 			{
@@ -336,34 +340,34 @@ async function scaffoldUiPackage(
 		// public packages must NOT have private:true
 		...(isPublic ? {} : { private: true }),
 		type: "module",
-		// exports field: always present so sub-paths work correctly
-		exports: {
-			".": {
-				import: "./dist/index.js",
-				types: "./dist/index.d.ts",
-			},
-			"./styles": "./styles/globals.css",
-			// Convenience: deep-import any component directly
-			"./components/*": {
-				import: "./dist/components/*.js",
-				types: "./dist/components/*.d.ts",
-			},
-		},
-		main: "./dist/index.js",
-		types: "./dist/index.d.ts",
-		scripts: {
-			build: "tsc -p tsconfig.json",
-			"build:watch": "tsc -p tsconfig.json --watch",
-			typecheck: "tsc --noEmit",
-		},
-		// public packages ship source maps and type declarations;
-		// internal ones get them too for IDE go-to-definition
 		...(isPublic
 			? {
+					main: "./dist/index.js",
+					types: "./dist/index.d.ts",
+					exports: {
+						".": {
+							import: "./dist/index.js",
+							types: "./dist/index.d.ts",
+						},
+						"./styles": "./styles/globals.css",
+						"./components/*": {
+							import: "./dist/components/*.js",
+							types: "./dist/components/*.d.ts",
+						},
+					},
 					files: ["dist", "styles"],
 					publishConfig: { access: "public" },
+					scripts: {
+						build: "tsc -p tsconfig.json",
+						"build:watch": "tsc -p tsconfig.json --watch",
+						typecheck: "tsc --noEmit",
+					},
 				}
-			: {}),
+			: {
+					scripts: {
+						typecheck: "tsc --noEmit",
+					},
+				}),
 		peerDependencies: {
 			react: "^18 || ^19",
 			"react-dom": "^18 || ^19",

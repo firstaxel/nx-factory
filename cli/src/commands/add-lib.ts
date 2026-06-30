@@ -155,27 +155,29 @@ export async function addLibCommand(options: AddLibOptions): Promise<void> {
 			version: "0.0.1",
 			...(isPublic ? {} : { private: true }),
 			type: "module",
-			// Always include exports — omitting it loses sub-path support and
-			// gives bundlers no encapsulation contract.
-			exports: {
-				".": {
-					import: "./dist/index.js",
-					types: "./dist/index.d.ts",
-				},
-			},
-			main: "./dist/index.js",
-			types: "./dist/index.d.ts",
-			scripts: {
-				build: "tsc -p tsconfig.json",
-				"build:watch": "tsc -p tsconfig.json --watch",
-				typecheck: "tsc --noEmit",
-			},
 			...(isPublic
 				? {
+						exports: {
+							".": {
+								import: "./dist/index.js",
+								types: "./dist/index.d.ts",
+							},
+						},
+						main: "./dist/index.js",
+						types: "./dist/index.d.ts",
+						scripts: {
+							build: "tsc -p tsconfig.json",
+							"build:watch": "tsc -p tsconfig.json --watch",
+							typecheck: "tsc --noEmit",
+						},
 						files: ["dist"],
 						publishConfig: { access: "public" },
-				  }
-				: {}),
+					}
+				: {
+						scripts: {
+							typecheck: "tsc --noEmit",
+						},
+					}),
 			devDependencies: {
 				typescript: "^5.6.0",
 			},
@@ -209,10 +211,14 @@ export async function addLibCommand(options: AddLibOptions): Promise<void> {
 				cmd: `import { ... } from "${scopedPackageName(scope, libName)}";`,
 				comment: "use in any app",
 			},
-			{
-				cmd: `${pm} nx build ${scopedPackageName(scope, libName)}`,
-				comment: "build the package",
-			},
+			...(visibility === "public"
+				? [
+						{
+							cmd: `${pm} nx build ${scopedPackageName(scope, libName)}`,
+							comment: "build the package",
+						},
+					]
+				: []),
 		],
 		tips: [
 			{

@@ -336,15 +336,22 @@ export async function migrateCommand(options: MigrateOptions): Promise<void> {
 
 					if (uiVisibility === "internal") {
 						pkg.private = true;
-						delete (pkg as Record<string, unknown>).publishConfig;
+						delete pkg.publishConfig;
+						delete pkg.exports;
+						delete pkg.main;
+						delete pkg.types;
+						delete pkg.files;
+						if (pkg.scripts) {
+							const scripts = pkg.scripts as Record<string, unknown>;
+							delete scripts.build;
+							delete scripts["build:watch"];
+						}
 					} else {
-						delete (pkg as Record<string, unknown>).private;
+						delete pkg.private;
 						pkg.publishConfig = { access: "public" };
 						pkg.files = ["dist", "styles"];
-					}
-
-					// Ensure exports field is present
-					if (!pkg.exports) {
+						pkg.main = "./dist/index.js";
+						pkg.types = "./dist/index.d.ts";
 						pkg.exports = {
 							".": { import: "./dist/index.js", types: "./dist/index.d.ts" },
 							"./styles": "./styles/globals.css",
@@ -353,6 +360,11 @@ export async function migrateCommand(options: MigrateOptions): Promise<void> {
 								types: "./dist/components/*.d.ts",
 							},
 						};
+						if (!pkg.scripts) pkg.scripts = {};
+						const scripts = pkg.scripts as Record<string, unknown>;
+						scripts.build = "tsc -p tsconfig.json";
+						scripts["build:watch"] = "tsc -p tsconfig.json --watch";
+						scripts.typecheck = "tsc --noEmit";
 					}
 
 					await fs.writeJson(pkgPath, pkg, { spaces: 2 });
@@ -573,16 +585,24 @@ async function analyseWorkspace(root: string): Promise<MigrationStatus> {
 	let uiPackageDir: string | null = null;
 	const packagesDir = path.join(root, "packages");
 	if (await pathExists(packagesDir)) {
-		const entries = await fs.readdir(packagesDir);
-		for (const e of entries) {
-			if (await pathExists(path.join(packagesDir, e, "components.json"))) {
-				uiPackageDir = path.join(packagesDir, e);
-				break;
+		if (cfg?.uiPackage) {
+			const candidate = path.join(packagesDir, cfg.uiPackage);
+			if (await pathExists(candidate)) {
+				uiPackageDir = candidate;
 			}
 		}
-		// Fallback to first package if no components.json found
-		if (!uiPackageDir && entries.length > 0) {
-			uiPackageDir = path.join(packagesDir, entries[0]);
+		if (!uiPackageDir) {
+			const entries = await fs.readdir(packagesDir);
+			for (const e of entries) {
+				if (await pathExists(path.join(packagesDir, e, "components.json"))) {
+					uiPackageDir = path.join(packagesDir, e);
+					break;
+				}
+			}
+			// Fallback to first package if no components.json found
+			if (!uiPackageDir && entries.length > 0) {
+				uiPackageDir = path.join(packagesDir, entries[0]);
+			}
 		}
 	}
 
@@ -616,12 +636,20 @@ async function analyseWorkspace(root: string): Promise<MigrationStatus> {
 						: `@${scope}/typescript/tsconfig.package.json`;
 				const extendsValue = String(tsJson.extends ?? "");
 
-				// Outdated if package still extends workspace base directly or doesn't match
-				// the scoped tooling preset required by visibility.
+				const co = (tsJson.compilerOptions ?? {}) as Record<string, unknown>;
+				const paths = (co.paths ?? {}) as Record<string, unknown>;
+				const hasPaths =
+					co.baseUrl === "." &&
+					`@${scope}/${e}` in paths &&
+					`@${scope}/${e}/*` in paths;
+
+				// Outdated if package still extends workspace base directly, doesn't match
+				// the scoped tooling preset required by visibility, or lacks custom self-referencing path aliases.
 				const isOutdated =
 					!extendsValue ||
 					extendsValue.includes("tsconfig.base.json") ||
-					extendsValue !== expectedExtends;
+					extendsValue !== expectedExtends ||
+					!hasPaths;
 				if (isOutdated) packagesWithBadTsConfig.push(e);
 			} catch {
 				/* malformed — flag it */ packagesWithBadTsConfig.push(e);
@@ -1122,6 +1150,15 @@ async function makePackagesInternal(
 		const pkgJson = (await fs.readJson(pkgPath)) as Record<string, unknown>;
 		pkgJson.private = true;
 		delete pkgJson.publishConfig;
+		delete pkgJson.exports;
+		delete pkgJson.main;
+		delete pkgJson.types;
+		delete pkgJson.files;
+		if (pkgJson.scripts) {
+			const scripts = pkgJson.scripts as Record<string, unknown>;
+			delete scripts.build;
+			delete scripts["build:watch"];
+		}
 		await fs.writeJson(pkgPath, pkgJson, { spaces: 2 });
 	}
 }
@@ -1139,8 +1176,15 @@ async function removeExportsFromPackages(
 		await backupIfExists(pkgPath, dryRun);
 
 		const pkgJson = (await fs.readJson(pkgPath)) as Record<string, unknown>;
-		if (pkgJson.exports === undefined) continue;
 		delete pkgJson.exports;
+		delete pkgJson.main;
+		delete pkgJson.types;
+		delete pkgJson.files;
+		if (pkgJson.scripts) {
+			const scripts = pkgJson.scripts as Record<string, unknown>;
+			delete scripts.build;
+			delete scripts["build:watch"];
+		}
 		await fs.writeJson(pkgPath, pkgJson, { spaces: 2 });
 	}
 }
@@ -1287,7 +1331,13 @@ async function countBackupFiles(root: string): Promise<number> {
 	async function walk(dir: string): Promise<void> {
 		const entries = await fs.readdir(dir, { withFileTypes: true });
 		for (const entry of entries) {
-			if (entry.name === "node_modules" || entry.name === ".git") continue;
+			if (
+				entry.name === "node_modules" ||
+				entry.name === ".git" ||
+				entry.name === ".migration-backups"
+			) {
+				continue;
+			}
 			const full = path.join(dir, entry.name);
 			if (entry.isDirectory()) {
 				await walk(full);
@@ -1298,6 +1348,13 @@ async function countBackupFiles(root: string): Promise<number> {
 	}
 
 	await walk(root);
+
+	// Also count the .migration-backups directory if it exists
+	const migrationBackupsDir = path.join(root, ".migration-backups");
+	if (await pathExists(migrationBackupsDir)) {
+		count++;
+	}
+
 	return count;
 }
 
@@ -1316,7 +1373,13 @@ export async function cleanupMigrationBackups(
 		try {
 			const entries = await fs.readdir(dir, { withFileTypes: true });
 			for (const entry of entries) {
-				if (entry.name === "node_modules" || entry.name === ".git") continue;
+				if (
+					entry.name === "node_modules" ||
+					entry.name === ".git" ||
+					entry.name === ".migration-backups"
+				) {
+					continue;
+				}
 				const full = path.join(dir, entry.name);
 				if (entry.isDirectory()) {
 					try {
@@ -1343,5 +1406,19 @@ export async function cleanupMigrationBackups(
 	}
 
 	await walk(root);
+
+	// Also delete the .migration-backups directory itself
+	const migrationBackupsDir = path.join(root, ".migration-backups");
+	if (await pathExists(migrationBackupsDir)) {
+		deleted++;
+		if (!dryRun) {
+			try {
+				await fs.remove(migrationBackupsDir);
+			} catch {
+				deleted--;
+			}
+		}
+	}
+
 	return deleted;
 }

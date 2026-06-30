@@ -262,11 +262,13 @@ export function packageTsConfig(opts: PackageTsConfigOptions): object {
 		co.lib = ["ES2022", "DOM", "DOM.Iterable"];
 	}
 
-	if (isInternal) {
-		// Self-referencing alias: within-package imports can use @scope/name
-		co.paths = { [`@${opts.scope}/${opts.pkgName}`]: ["./index.ts"] };
-		co.baseUrl = ".";
-	} else {
+	co.baseUrl = ".";
+	co.paths = {
+		[`@${opts.scope}/${opts.pkgName}`]: ["./index.tsx", "./index.ts"],
+		[`@${opts.scope}/${opts.pkgName}/*`]: ["./*"],
+	};
+
+	if (!isInternal) {
 		// Public packages need explicit output paths
 		co.outDir = "dist";
 		co.rootDir = ".";

@@ -179,6 +179,7 @@ export async function addLibCommand(options: AddLibOptions): Promise<void> {
 						},
 					}),
 			devDependencies: {
+				[`@${scope}/typescript`]: pmWorkspaceProtocol(pm),
 				typescript: "^5.6.0",
 			},
 		});

@@ -331,6 +331,10 @@ async function addUiDependency(
 		...pkg.dependencies,
 		[scopedPackageName(scope, uiPkgName)]: pmWorkspaceProtocol(pm),
 	};
+	pkg.devDependencies = {
+		...(pkg.devDependencies ?? {}),
+		[`@${scope}/typescript`]: pmWorkspaceProtocol(pm),
+	};
 	await fs.writeJson(pkgPath, pkg, { spaces: 2 });
 }
 

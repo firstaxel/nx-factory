@@ -220,8 +220,7 @@ export async function migrateCommand(options: MigrateOptions): Promise<void> {
 
 	// ── Count steps dynamically ───────────────────────────────────────────────
 	let totalSteps = 0;
-	if (status.hasLegacyRootTsConfig) totalSteps++;
-	else if (!status.hasTsConfigBase) totalSteps++;
+	if (status.hasLegacyRootTsConfig || !status.hasTsConfigBase) totalSteps++;
 	if (shouldMigrateTypescriptTooling) totalSteps++;
 	if (!status.hasRootToolingWorkspaceEntry) totalSteps++;
 	if (status.projectsMissingTypescriptToolingDep.length > 0) totalSteps++;
@@ -242,40 +241,11 @@ export async function migrateCommand(options: MigrateOptions): Promise<void> {
 	const step = createStepRunner(totalSteps, options.dryRun);
 
 	// ── Step 1: Consolidate or Write tsconfig.json ────────────────────────────
-	if (status.hasLegacyRootTsConfig) {
-		await step("Consolidate tsconfig.base.json into tsconfig.json", async () => {
-			const { default: fs } = await import("fs-extra");
-			const tsBasePath = path.join(root, "tsconfig.base.json");
-			const tsConfigPath = path.join(root, "tsconfig.json");
-
-			let baseContent: any = {};
-			try {
-				baseContent = await fs.readJson(tsBasePath);
-			} catch {
-				// ignore
-			}
-
-			await backupIfExists(tsBasePath, options.dryRun);
-			await backupIfExists(tsConfigPath, options.dryRun);
-
-			const defaultBase = rootTsConfigBase(scope) as any;
-			const merged = {
-				...defaultBase,
-				compilerOptions: {
-					...defaultBase.compilerOptions,
-					...(baseContent.compilerOptions ?? {}),
-					paths: {
-						...(defaultBase.compilerOptions?.paths ?? {}),
-						...(baseContent.compilerOptions?.paths ?? {}),
-					},
-				},
-			};
-
-			await writeJson(tsConfigPath, merged);
-			await fs.remove(tsBasePath);
-		});
-	} else if (!status.hasTsConfigBase) {
-		await step("Write root tsconfig.json", async () => {
+	if (status.hasLegacyRootTsConfig || !status.hasTsConfigBase) {
+		const stepName = status.hasLegacyRootTsConfig
+			? "Consolidate tsconfig.base.json into tsconfig.json"
+			: "Write root tsconfig.json";
+		await step(stepName, async () => {
 			const tsConfigPath = path.join(root, "tsconfig.json");
 			await backupIfExists(tsConfigPath, options.dryRun);
 			await writeJson(tsConfigPath, rootTsConfigBase(scope));
@@ -923,11 +893,38 @@ async function migrateTypescriptToolingPackage(
 		path.join(toolingDir, "package.json"),
 		typescriptPackageJson(scope),
 	);
-	const hasBase = await pathExists(path.join(root, "tsconfig.base.json"));
-	const rootTsConfigName = hasBase ? "tsconfig.base.json" : "tsconfig.json";
-	const presets = typescriptPresets(rootTsConfigName);
+
+	// Read root tsconfig.base.json to extract custom options/paths if it exists
+	const rootBaseOldPath = path.join(root, "tsconfig.base.json");
+	let customCompilerOptions: any = {};
+	if (await pathExists(rootBaseOldPath)) {
+		try {
+			const oldBase = await fs.readJson(rootBaseOldPath);
+			customCompilerOptions = oldBase.compilerOptions ?? {};
+		} catch {
+			// ignore
+		}
+	}
+
+	const presets = typescriptPresets(scope);
+	if (presets["tsconfig.base.json"] && Object.keys(customCompilerOptions).length > 0) {
+		const presetBase = presets["tsconfig.base.json"] as any;
+		presetBase.compilerOptions = {
+			...presetBase.compilerOptions,
+			...customCompilerOptions,
+			paths: {
+				...(presetBase.compilerOptions?.paths ?? {}),
+				...(customCompilerOptions.paths ?? {}),
+			},
+		};
+	}
+
 	for (const [filename, content] of Object.entries(presets)) {
 		await writeJson(path.join(toolingDir, filename), content);
+	}
+
+	if (await pathExists(rootBaseOldPath)) {
+		await fs.remove(rootBaseOldPath);
 	}
 }
 
@@ -956,19 +953,23 @@ async function toolingTypescriptBaseExtendsRoot(
 	root: string,
 ): Promise<boolean> {
 	const { default: fs } = await import("fs-extra");
-	const tsBasePath = path.join(
+	const toolingTsBase = path.join(
 		root,
 		"tooling",
 		"typescript",
 		"tsconfig.base.json",
 	);
-	if (!(await pathExists(tsBasePath))) return false;
+	const rootTsConfig = path.join(root, "tsconfig.json");
+	if (!(await pathExists(toolingTsBase)) || !(await pathExists(rootTsConfig))) return false;
 
 	try {
-		const tsBase = (await fs.readJson(tsBasePath)) as { extends?: unknown };
-		const hasBase = await pathExists(path.join(root, "tsconfig.base.json"));
-		const expectedExtends = hasBase ? "../../tsconfig.base.json" : "../../tsconfig.json";
-		return tsBase.extends === expectedExtends;
+		const toolingBase = (await fs.readJson(toolingTsBase)) as { extends?: unknown };
+		const rootTs = (await fs.readJson(rootTsConfig)) as { extends?: unknown };
+
+		return (
+			toolingBase.extends === undefined &&
+			rootTs.extends === "./tooling/typescript/tsconfig.base.json"
+		);
 	} catch {
 		return false;
 	}

@@ -1,7 +1,7 @@
 import inquirer from "inquirer";
 import path from "path";
 import { createRequire } from "module";
-import { run, runInDir, pmAdd, pmx, pmxArgs } from "../exec.js";
+import { run, runInDir, pmAdd, pmx, pmxArgs, pmWorkspaceProtocol } from "../exec.js";
 import { writeJson, writeFile, ensureDir, pathExists } from "../files.js";
 import {
 	saveConfig,
@@ -253,7 +253,7 @@ export async function initCommand(options: InitOptions): Promise<void> {
 
 	await step("Update tsconfig.json", () => updateTsConfig(cwd, scope));
 
-	await step("Update package.json", () => updatePackageJson(cwd));
+	await step("Update package.json", () => updatePackageJson(cwd, scope));
 
 	await step("Install all dependencies", async () => {
 		try {
@@ -373,6 +373,7 @@ async function scaffoldUiPackage(
 			"react-dom": "^18 || ^19",
 		},
 		devDependencies: {
+			[`@${scope}/typescript`]: pmWorkspaceProtocol(pm),
 			"@types/react": "^19.0.0",
 			"@types/react-dom": "^19.0.0",
 			react: "^19.0.0",
@@ -825,8 +826,8 @@ async function updateNxJson(cwd: string): Promise<void> {
 	}
 }
 
-// Update the generated workspace package.json with the expected workspaces entries.
-async function updatePackageJson(cwd: string): Promise<void> {
+// Update the generated workspace package.json with the expected workspaces entries and dependencies.
+async function updatePackageJson(cwd: string, scope: string): Promise<void> {
 	const pkgJsonPath = path.join(cwd, "package.json");
 	const { default: fs } = await import("fs-extra");
 	if (!(await pathExists(pkgJsonPath))) return;
@@ -844,6 +845,11 @@ async function updatePackageJson(cwd: string): Promise<void> {
 	} else {
 		pkgJson.workspaces = required;
 	}
+
+	pkgJson.devDependencies = {
+		...(pkgJson.devDependencies ?? {}),
+		[`@${scope}/typescript`]: "workspace:*",
+	};
 
 	await fs.writeJson(pkgJsonPath, pkgJson, { spaces: 2 });
 }
@@ -909,7 +915,7 @@ async function writeTypescriptPackage(
 		typescriptPackageJson(scope),
 	);
 	// tsconfig presets
-	const presets = typescriptPresets();
+	const presets = typescriptPresets(scope);
 	for (const [filename, content] of Object.entries(presets)) {
 		await writeJson(path.join(pkgDir, filename), content);
 	}

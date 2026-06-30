@@ -39,6 +39,7 @@ interface MigrateOptions {
 interface MigrationStatus {
 	hasConfig: boolean;
 	configVersion: string | null;
+	hasLegacyRootTsConfig: boolean;
 	hasTsConfigBase: boolean;
 	hasToolingTypescriptPackage: boolean;
 	hasToolingTypescriptBaseExtendsRoot: boolean;
@@ -219,7 +220,8 @@ export async function migrateCommand(options: MigrateOptions): Promise<void> {
 
 	// ── Count steps dynamically ───────────────────────────────────────────────
 	let totalSteps = 0;
-	if (!status.hasTsConfigBase) totalSteps++;
+	if (status.hasLegacyRootTsConfig) totalSteps++;
+	else if (!status.hasTsConfigBase) totalSteps++;
 	if (shouldMigrateTypescriptTooling) totalSteps++;
 	if (!status.hasRootToolingWorkspaceEntry) totalSteps++;
 	if (status.projectsMissingTypescriptToolingDep.length > 0) totalSteps++;
@@ -229,7 +231,6 @@ export async function migrateCommand(options: MigrateOptions): Promise<void> {
 	if (status.packagesWithBadTsConfig.length > 0) totalSteps++;
 	if (status.appsWithBadTsConfig.length > 0) totalSteps++;
 	if (!status.hasConfig || !status.hasUiPackageVisibility) totalSteps++;
-	totalSteps += 1; // always update solution tsconfig.json
 	if (removeJsExtensions && status.internalPackagesWithJsExtensions.length > 0)
 		totalSteps++;
 	if (cleanupBackupsNow && status.backupFileCount > 0) totalSteps++;
@@ -240,12 +241,44 @@ export async function migrateCommand(options: MigrateOptions): Promise<void> {
 	);
 	const step = createStepRunner(totalSteps, options.dryRun);
 
-	// ── Step 1: Write tsconfig.base.json ──────────────────────────────────────
-	if (!status.hasTsConfigBase) {
-		await step("Write tsconfig.base.json", async () => {
+	// ── Step 1: Consolidate or Write tsconfig.json ────────────────────────────
+	if (status.hasLegacyRootTsConfig) {
+		await step("Consolidate tsconfig.base.json into tsconfig.json", async () => {
+			const { default: fs } = await import("fs-extra");
 			const tsBasePath = path.join(root, "tsconfig.base.json");
+			const tsConfigPath = path.join(root, "tsconfig.json");
+
+			let baseContent: any = {};
+			try {
+				baseContent = await fs.readJson(tsBasePath);
+			} catch {
+				// ignore
+			}
+
 			await backupIfExists(tsBasePath, options.dryRun);
-			await writeJson(tsBasePath, rootTsConfigBase(scope));
+			await backupIfExists(tsConfigPath, options.dryRun);
+
+			const defaultBase = rootTsConfigBase(scope) as any;
+			const merged = {
+				...defaultBase,
+				compilerOptions: {
+					...defaultBase.compilerOptions,
+					...(baseContent.compilerOptions ?? {}),
+					paths: {
+						...(defaultBase.compilerOptions?.paths ?? {}),
+						...(baseContent.compilerOptions?.paths ?? {}),
+					},
+				},
+			};
+
+			await writeJson(tsConfigPath, merged);
+			await fs.remove(tsBasePath);
+		});
+	} else if (!status.hasTsConfigBase) {
+		await step("Write root tsconfig.json", async () => {
+			const tsConfigPath = path.join(root, "tsconfig.json");
+			await backupIfExists(tsConfigPath, options.dryRun);
+			await writeJson(tsConfigPath, rootTsConfigBase(scope));
 		});
 	}
 
@@ -462,30 +495,7 @@ export async function migrateCommand(options: MigrateOptions): Promise<void> {
 		);
 	}
 
-	// ── Step 4b: Update/create root solution tsconfig.json ────────────────────
-	await step("Update root tsconfig.json solution file", async () => {
-		const { default: fs } = await import("fs-extra");
-		const pkgNames: string[] = [];
-		const appNames: string[] = [];
-		try {
-			const pkgDir = path.join(root, "packages");
-			if (await pathExists(pkgDir))
-				pkgNames.push(...(await fs.readdir(pkgDir)));
-		} catch {
-			/* ok */
-		}
-		try {
-			const appsDir = path.join(root, "apps");
-			if (await pathExists(appsDir))
-				appNames.push(...(await fs.readdir(appsDir)));
-		} catch {
-			/* ok */
-		}
-		await writeJson(
-			path.join(root, "tsconfig.json"),
-			rootTsConfigSolution(pkgNames, appNames),
-		);
-	});
+
 
 	// ── Step 5: Update nx-factory.config.json ─────────────────────────────────
 	if (!status.hasConfig || !status.hasUiPackageVisibility) {
@@ -566,9 +576,21 @@ async function analyseWorkspace(root: string): Promise<MigrationStatus> {
 
 	const cfg = await loadConfig();
 	const scope = resolveScope(cfg);
-	const hasTsConfigBase = await pathExists(
+	const hasLegacyRootTsConfig = await pathExists(
 		path.join(root, "tsconfig.base.json"),
 	);
+	let hasTsConfigBase = false;
+	const rootTsConfigPath = path.join(root, "tsconfig.json");
+	if (await pathExists(rootTsConfigPath)) {
+		try {
+			const tsConfig = await fs.readJson(rootTsConfigPath);
+			if (tsConfig.compilerOptions && !tsConfig.references) {
+				hasTsConfigBase = true;
+			}
+		} catch {
+			// ignore
+		}
+	}
 	const hasToolingTypescriptPackage = await pathExists(
 		path.join(root, "tooling", "typescript", "tsconfig.internal.json"),
 	);
@@ -738,6 +760,7 @@ async function analyseWorkspace(root: string): Promise<MigrationStatus> {
 	return {
 		hasConfig: !!cfg,
 		configVersion: cfg?.version ?? null,
+		hasLegacyRootTsConfig,
 		hasTsConfigBase,
 		hasToolingTypescriptPackage,
 		hasToolingTypescriptBaseExtendsRoot,
@@ -759,6 +782,7 @@ async function analyseWorkspace(root: string): Promise<MigrationStatus> {
 function isFullyMigrated(s: MigrationStatus): boolean {
 	return (
 		s.hasConfig &&
+		!s.hasLegacyRootTsConfig &&
 		s.hasTsConfigBase &&
 		s.hasToolingTypescriptPackage &&
 		s.hasToolingTypescriptBaseExtendsRoot &&
@@ -784,15 +808,22 @@ function printAnalysis(s: MigrationStatus): void {
 	console.log(
 		`  ${s.hasConfig ? tick : cross}  nx-factory.config.json ${s.hasConfig ? c.dim(`(v${s.configVersion ?? "unknown"})`) : c.yellow("missing")}`,
 	);
-	console.log(
-		`  ${s.hasTsConfigBase ? tick : cross}  tsconfig.base.json ${s.hasTsConfigBase ? "" : c.yellow("missing — will create")}`,
-	);
+	if (s.hasLegacyRootTsConfig) {
+		console.log(
+			`  ${cross}  legacy tsconfig.base.json detected ${c.yellow("will consolidate into tsconfig.json")}`,
+		);
+	} else {
+		console.log(
+			`  ${s.hasTsConfigBase ? tick : cross}  root tsconfig.json base configuration ${s.hasTsConfigBase ? "" : c.yellow("missing — will create")}`,
+		);
+	}
 	console.log(
 		`  ${s.hasToolingTypescriptPackage ? tick : cross}  tooling/typescript presets ${s.hasToolingTypescriptPackage ? "" : c.yellow("missing — will migrate")}`,
 	);
 	if (s.hasToolingTypescriptPackage) {
+		const expectedFile = s.hasLegacyRootTsConfig ? "tsconfig.base.json" : "tsconfig.json";
 		console.log(
-			`  ${s.hasToolingTypescriptBaseExtendsRoot ? tick : cross}  tooling/typescript/tsconfig.base.json extends ../../tsconfig.base.json ${s.hasToolingTypescriptBaseExtendsRoot ? "" : c.yellow("missing — will refresh presets")}`,
+			`  ${s.hasToolingTypescriptBaseExtendsRoot ? tick : cross}  tooling/typescript/tsconfig.base.json extends ../../${expectedFile} ${s.hasToolingTypescriptBaseExtendsRoot ? "" : c.yellow("missing — will refresh presets")}`,
 		);
 		console.log(
 			`  ${s.hasToolingTypescriptTsconfigExportAlias ? tick : cross}  tooling/typescript/package.json exports ./tsconfig.json ${s.hasToolingTypescriptTsconfigExportAlias ? "" : c.yellow("missing — will refresh package.json")}`,
@@ -892,7 +923,9 @@ async function migrateTypescriptToolingPackage(
 		path.join(toolingDir, "package.json"),
 		typescriptPackageJson(scope),
 	);
-	const presets = typescriptPresets();
+	const hasBase = await pathExists(path.join(root, "tsconfig.base.json"));
+	const rootTsConfigName = hasBase ? "tsconfig.base.json" : "tsconfig.json";
+	const presets = typescriptPresets(rootTsConfigName);
 	for (const [filename, content] of Object.entries(presets)) {
 		await writeJson(path.join(toolingDir, filename), content);
 	}
@@ -933,7 +966,9 @@ async function toolingTypescriptBaseExtendsRoot(
 
 	try {
 		const tsBase = (await fs.readJson(tsBasePath)) as { extends?: unknown };
-		return tsBase.extends === "../../tsconfig.base.json";
+		const hasBase = await pathExists(path.join(root, "tsconfig.base.json"));
+		const expectedExtends = hasBase ? "../../tsconfig.base.json" : "../../tsconfig.json";
+		return tsBase.extends === expectedExtends;
 	} catch {
 		return false;
 	}

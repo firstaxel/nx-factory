@@ -559,11 +559,22 @@ async function patchAppTsConfig(
 		? framework
 		: "vite") as "nextjs" | "vite" | "remix" | "expo";
 
-	// Check if packages/typescript/ exists — it does in workspaces created with
+	// Check if tooling/typescript/ or packages/typescript/ exists — it does in workspaces created with
 	// the current CLI. Older workspaces should run `nx-factory-cli migrate` first.
 	const workspaceRoot = path.resolve(appDir, "../..");
-	const toolingExists = await pathExists(path.join(workspaceRoot, "packages", "typescript", "tsconfig.internal.json"));
-	const generated = appTsConfig({ scope, framework: fw, hasSrcDir, typescriptPkgExists: toolingExists });
+	const toolingExists =
+		(await pathExists(path.join(workspaceRoot, "tooling", "typescript", "tsconfig.internal.json"))) ||
+		(await pathExists(path.join(workspaceRoot, "packages", "typescript", "tsconfig.internal.json")));
+	const hasBase = await pathExists(path.join(workspaceRoot, "tsconfig.base.json"));
+	const rootTsConfigName = hasBase ? "tsconfig.base.json" : "tsconfig.json";
+
+	const generated = appTsConfig({
+		scope,
+		framework: fw,
+		hasSrcDir,
+		typescriptPkgExists: toolingExists,
+		rootTsConfigName,
+	});
 
 	const existing = await fs.readJson(tsConfigPath);
 	const merged = {

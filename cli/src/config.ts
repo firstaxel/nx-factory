@@ -1,4 +1,4 @@
-import path from "path";
+import path from "node:path";
 import { pathExists, readJson, writeJson } from "./files.js";
 
 export const CONFIG_FILENAME = "nx-factory.config.json";

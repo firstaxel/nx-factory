@@ -849,43 +849,23 @@ async function updatePackageJson(cwd: string): Promise<void> {
 }
 
 /**
- * Writes tsconfig.base.json at the workspace root and the root solution
- * tsconfig.json. Also patches the example app's tsconfig if it was scaffolded.
+ * Writes the root tsconfig.json containing the base settings and path aliases.
+ * Also patches the example app's tsconfig if it was scaffolded.
  */
 async function updateTsConfig(cwd: string, scope: string): Promise<void> {
 	const { default: fs } = await import("fs-extra");
 
-	// ── 1. Root tsconfig.base.json ────────────────────────────────────────────
+	// Write base config directly to the root tsconfig.json
 	await writeJson(
-		path.join(cwd, "tsconfig.base.json"),
+		path.join(cwd, "tsconfig.json"),
 		rootTsConfigBase(scope),
 	);
 
-	// ── 2. Root solution tsconfig.json ───────────────────────────────────────
-	// A solution file that references all packages and apps so IDEs and
-	// `tsc --build` can see the whole workspace in one pass.
-	const pkgNames: string[] = [];
-	const appNames: string[] = [];
-	try {
-		const pkgDir = path.join(cwd, "packages");
-		if (await pathExists(pkgDir)) {
-			pkgNames.push(...(await fs.readdir(pkgDir)));
-		}
-	} catch {
-		/* packages/ not created yet */
+	// Remove tsconfig.base.json if created by create-nx-workspace to avoid duplicate configs
+	const legacyBase = path.join(cwd, "tsconfig.base.json");
+	if (await pathExists(legacyBase)) {
+		await fs.remove(legacyBase);
 	}
-	try {
-		const appsDir = path.join(cwd, "apps");
-		if (await pathExists(appsDir)) {
-			appNames.push(...(await fs.readdir(appsDir)));
-		}
-	} catch {
-		/* apps/ not created yet */
-	}
-	await writeJson(
-		path.join(cwd, "tsconfig.json"),
-		rootTsConfigSolution(pkgNames, appNames),
-	);
 
 	// ── 3. Patch the example app tsconfig (if it was scaffolded) ─────────────
 	for (const appTsConfigRel of [
